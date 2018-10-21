@@ -15,7 +15,7 @@ use Mix.Config
 # which you typically run after static files are built.
 config :apiserver, Apiserver.Endpoint,
   load_from_system_env: true,
-  url: [host: "example.com", port: 80],
+  url: [host: "cobra.red9.ir", port: 6999],
   cache_static_manifest: "priv/static/cache_manifest.json"
 
 # ## SSL Support
@@ -53,7 +53,7 @@ config :apiserver, Apiserver.Endpoint,
 # Alternatively, you can configure exactly which server to
 # start per endpoint:
 #
-#     config :apiserver, Apiserver.Endpoint, server: true
+config :apiserver, Apiserver.Endpoint, server: true
 #
 
 # Finally import the config/prod.secret.exs
