@@ -19,6 +19,7 @@
 
 - Install Elixir on every node.
 
+- You can alternativly can clone red9-binaries and get [ready to use ova file](https://gitman.ir/sPod/red9-binaries) and import it in your VM.
 
 ## Starting platform
 ```
