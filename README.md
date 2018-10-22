@@ -1,5 +1,13 @@
 # Red9
 
+## TODO:
+    - Create a true development environment including:
+        - A dummy gateway to mimic network faults.
+        - A dummy MO sending engine for test services.
+        - A true stress test toolset.
+        - Process monitoring toolset
+    - Write Module names and functions to program the coding schedule between @rodmena and @msd
+
 ## Docs
 - You can read architecture [document here](https://gitman.ir/sPod/red9-architecture/src/master/architecture.pdf).
 - You can see architecture [digragram here](https://gitman.ir/sPod/red9-architecture/raw/master/diagram.png).
