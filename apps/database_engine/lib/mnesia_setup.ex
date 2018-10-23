@@ -1,7 +1,8 @@
 defmodule DatabaseEngine.Mnesia.DbSetup do
   require Logger
 
-  @nodes [:"n1@f.local", :"n2@f.local", :"n3@f.local"]
+  [{:database, [_,{:config, [hosts: nodes]},_,_,_]}] = Application.get_env(:libcluster, :topologies) 
+  @nodes nodes
   # @data File.read!("/Users/rodmena/Movies/BW-Scroll.mp4") |> Base.encode64
   #
 

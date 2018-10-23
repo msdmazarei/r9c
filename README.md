@@ -24,8 +24,10 @@
 ## Starting platform
 ```
 mix do clean, deps.clean --all, deps.get, deps.compile, compile, digest
-mix phx.server
-
+```
+We need at least 3 servers to start development:
+```
+iex --name [a|b|c]@127.0.0.1 --cookie 123 -S mix
 ```
 
 ## Building binaries

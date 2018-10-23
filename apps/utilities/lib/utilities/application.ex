@@ -6,8 +6,10 @@ defmodule Utilities.Application do
   use Application
 
   def start(_type, _args) do
-    # List all child processes to be supervised
+    topologies = Application.get_env(:libcluster, :topologies)
+
     children = [
+      {Cluster.Supervisor, [topologies, [name: Red9Cobra.ClusterSupervisor]]}
       # Starts a worker by calling: Utilities.Worker.start_link(arg)
       # {Utilities.Worker, arg},
     ]
