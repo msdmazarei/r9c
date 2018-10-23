@@ -30,5 +30,5 @@ use Mix.Config
 #     import_config "#{Mix.env()}.exs"
 #
 config :mnesia,
-  dir: '/usr/local/var/RED9_COBRA_db_#{Mix.env()}_#{node()}',
+  dir: 'STORAGE/RED9_COBRA_db_#{Mix.env()}_#{node()}',
   dc_dump_limit: 512

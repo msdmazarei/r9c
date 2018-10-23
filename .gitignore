@@ -20,3 +20,5 @@ erl_crash.dump
 *.ez
 
 *.secret.exs
+
+STORAGE/RED9_COBRA_db_*/

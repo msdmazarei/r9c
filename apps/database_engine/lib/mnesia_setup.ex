@@ -1,7 +1,14 @@
 defmodule DatabaseEngine.Mnesia.DbSetup do
+  @moduledoc """
+  Creates and setups new mnesia database for project.
+  What you need is to run :setup_everything function.
+  You will also have a Mix task for it.
+  """
   require Logger
 
-  [{:database, [_,{:config, [hosts: nodes]},_,_,_]}] = Application.get_env(:libcluster, :topologies) 
+  [{:database, [_, {:config, [hosts: nodes]}, _, _, _]}] =
+    Application.get_env(:libcluster, :topologies)
+
   @nodes nodes
   # @data File.read!("/Users/rodmena/Movies/BW-Scroll.mp4") |> Base.encode64
   #
@@ -11,11 +18,7 @@ defmodule DatabaseEngine.Mnesia.DbSetup do
     Logger.info(fn -> "schema created. Loading ..." end)
     Process.sleep(2_000)
     create_test_table()
-  end
-
-  def connect_to_all do
-    [_ | friends] = @nodes
-    friends |> Enum.map(fn n -> Node.ping(n) end)
+    :ok
   end
 
   def stop_mnesia do
@@ -31,11 +34,11 @@ defmodule DatabaseEngine.Mnesia.DbSetup do
     |> Enum.map(fn n ->
       Node.spawn(n, __MODULE__, :start_mnesia, [])
     end)
+
+    :ok
   end
 
   def stop_every_mnesia do
-    connect_to_all()
-
     @nodes
     |> Enum.map(fn n ->
       Node.spawn(n, __MODULE__, :stop_mnesia, [])
@@ -43,8 +46,10 @@ defmodule DatabaseEngine.Mnesia.DbSetup do
   end
 
   def delete_schema do
-    connect_to_all()
     stop_every_mnesia()
+
+    Logger.info(fn -> "stopping nodes ..." end)
+    Process.sleep(2_000)
 
     case :mnesia.delete_schema(@nodes) do
       :ok ->
@@ -55,7 +60,6 @@ defmodule DatabaseEngine.Mnesia.DbSetup do
   end
 
   def create_schema do
-    connect_to_all()
     stop_every_mnesia()
     Logger.info(fn -> "stopping nodes ..." end)
     Process.sleep(2_000)
@@ -72,8 +76,6 @@ defmodule DatabaseEngine.Mnesia.DbSetup do
   end
 
   def create_test_table do
-    connect_to_all()
-
     case :mnesia.create_table(TestTable, [
            {:disc_copies, @nodes},
            majority: true,

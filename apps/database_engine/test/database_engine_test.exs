@@ -1,5 +1,7 @@
 defmodule DatabaseEngineTest do
-  use ExUnit.Case
+  use ExUnit.Case, async: true
+  import ExUnit.CaptureLog
+
   doctest DatabaseEngine
 
   test "greets the world" do
