@@ -15,4 +15,8 @@ defmodule Utilities do
   def hello do
     :world
   end
+
+  def randseed do
+    :rand.seed(:exs1024s)
+  end
 end

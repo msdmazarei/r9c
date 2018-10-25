@@ -10,25 +10,30 @@ defmodule DatabaseEngine.Mnesia.DbSetup do
     Application.get_env(:libcluster, :topologies)
 
   @nodes nodes
+  @wait_time 5_000
   # @data File.read!("/Users/rodmena/Movies/BW-Scroll.mp4") |> Base.encode64
   #
 
+  @spec setup_everything() :: :ok
   def setup_everything do
     create_schema()
     Logger.info(fn -> "schema created. Loading ..." end)
-    Process.sleep(2_000)
+    Process.sleep(@wait_time)
     create_test_table()
     :ok
   end
 
+  @spec stop_mnesia() :: :stopping
   def stop_mnesia do
     :stopped = :mnesia.stop()
   end
 
+  @spec start_mnesia() :: :ok
   def start_mnesia do
     :ok = :mnesia.start()
   end
 
+  @spec start_every_mnesia() :: :ok
   def start_every_mnesia do
     @nodes
     |> Enum.map(fn n ->
@@ -38,18 +43,22 @@ defmodule DatabaseEngine.Mnesia.DbSetup do
     :ok
   end
 
+  @spec stop_every_mnesia() :: :ok
   def stop_every_mnesia do
     @nodes
     |> Enum.map(fn n ->
       Node.spawn(n, __MODULE__, :stop_mnesia, [])
     end)
+
+    :ok
   end
 
+  @spec delete_schema() :: :ok
   def delete_schema do
     stop_every_mnesia()
 
     Logger.info(fn -> "stopping nodes ..." end)
-    Process.sleep(2_000)
+    Process.sleep(@wait_time)
 
     case :mnesia.delete_schema(@nodes) do
       :ok ->
@@ -59,10 +68,11 @@ defmodule DatabaseEngine.Mnesia.DbSetup do
     start_every_mnesia()
   end
 
+  @spec create_schema() :: :ok
   def create_schema do
     stop_every_mnesia()
     Logger.info(fn -> "stopping nodes ..." end)
-    Process.sleep(2_000)
+    Process.sleep(@wait_time)
 
     case :mnesia.create_schema(@nodes) do
       :ok ->
@@ -75,6 +85,7 @@ defmodule DatabaseEngine.Mnesia.DbSetup do
     start_every_mnesia()
   end
 
+  @spec create_test_table() :: :ok
   def create_test_table do
     case :mnesia.create_table(TestTable, [
            {:disc_copies, @nodes},
@@ -92,6 +103,7 @@ defmodule DatabaseEngine.Mnesia.DbSetup do
     :ok
   end
 
+  @spec insert_test_record() :: {:atomic, :ok}
   def insert_test_record do
     idx = UUID.uuid4()
     data2 = :hasan
@@ -106,6 +118,7 @@ defmodule DatabaseEngine.Mnesia.DbSetup do
       end)
   end
 
+  @spec populate_db() :: term
   def populate_db do
     for _ <- 1..100 do
       Node.spawn(@nodes |> Enum.shuffle() |> hd, fn ->
