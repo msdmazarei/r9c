@@ -21,7 +21,7 @@ defmodule Utilities do
     randomize seed.  You need it everytime you need to generate random.
   """
 
-  @spec randseed() :: term
+  @spec randseed() :: any()
   def randseed do
     :rand.seed(:exs1024s)
   end
@@ -36,8 +36,15 @@ defmodule Utilities do
   @spec randnode() :: Atom.t()
   def randnode do
     ## later, this needs to be fixed and cached.
-    nodes = Node.list() ++ [node()]
     randseed()
-    nodes |> Enum.shuffle() |> hd
+    allnodes |> Enum.shuffle() |> hd
+  end
+
+  @doc """
+      gets already active nodes in cluster.
+  """
+  @spec allnodes() :: list(Atom.t())
+  def allnodes() do
+    Node.list() ++ [node()]
   end
 end

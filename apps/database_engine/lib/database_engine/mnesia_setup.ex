@@ -6,20 +6,21 @@ defmodule DatabaseEngine.Mnesia.DbSetup do
   """
   require Logger
 
-  [{:database, [_, {:config, [hosts: nodes]}, _, _, _]}] =
-    Application.get_env(:libcluster, :topologies)
+  # [{:database, [_, {:config, [hosts: nodes]}, _, _, _]}] =
+  #  Application.get_env(:libcluster, :topologies)
 
-  @nodes nodes
-  @wait_time 5_000
+  # @nodes nodes
+  @wait_time 1_000
   # @data File.read!("/Users/rodmena/Movies/BW-Scroll.mp4") |> Base.encode64
   #
 
   @spec setup_everything() :: :ok
   def setup_everything do
-    create_schema()
+    nodes = Utilities.allnodes()
+    create_schema(nodes)
     Logger.info(fn -> "schema created. Loading ..." end)
     Process.sleep(@wait_time)
-    create_test_table()
+    create_test_table(nodes)
     :ok
   end
 
@@ -33,10 +34,10 @@ defmodule DatabaseEngine.Mnesia.DbSetup do
     :ok = :mnesia.start()
   end
 
-  @spec start_every_mnesia() :: :ok
-  def start_every_mnesia do
+  @spec start_every_mnesia(list(Atom.t())) :: :ok
+  def start_every_mnesia(nodes) do
     _ =
-      @nodes
+      nodes
       |> Enum.map(fn n ->
         Node.spawn(n, __MODULE__, :start_mnesia, [])
       end)
@@ -44,10 +45,10 @@ defmodule DatabaseEngine.Mnesia.DbSetup do
     :ok
   end
 
-  @spec stop_every_mnesia() :: :ok
-  def stop_every_mnesia do
+  @spec stop_every_mnesia(list(Atom.t())) :: :ok
+  def stop_every_mnesia(nodes) do
     _ =
-      @nodes
+      nodes
       |> Enum.map(fn n ->
         Node.spawn(n, __MODULE__, :stop_mnesia, [])
       end)
@@ -55,28 +56,28 @@ defmodule DatabaseEngine.Mnesia.DbSetup do
     :ok
   end
 
-  @spec delete_schema() :: :ok
-  def delete_schema do
-    stop_every_mnesia()
+  @spec delete_schema(list(Atom.t())) :: :ok
+  def delete_schema(nodes) do
+    stop_every_mnesia(nodes)
 
     Logger.info(fn -> "stopping nodes ..." end)
     Process.sleep(@wait_time)
 
-    case :mnesia.delete_schema(@nodes) do
+    case :mnesia.delete_schema(nodes) do
       :ok ->
         Logger.warn("database schema deleted.")
     end
 
-    start_every_mnesia()
+    start_every_mnesia(nodes)
   end
 
-  @spec create_schema() :: :ok
-  def create_schema do
-    stop_every_mnesia()
+  @spec create_schema(list(Atom.t())) :: :ok
+  def create_schema(nodes) do
+    stop_every_mnesia(nodes)
     Logger.info(fn -> "stopping nodes ..." end)
     Process.sleep(@wait_time)
 
-    case :mnesia.create_schema(@nodes) do
+    case :mnesia.create_schema(nodes) do
       :ok ->
         Logger.info(fn -> "database schema created." end)
 
@@ -84,13 +85,13 @@ defmodule DatabaseEngine.Mnesia.DbSetup do
         Logger.debug(fn -> "database schema is already created." end)
     end
 
-    start_every_mnesia()
+    start_every_mnesia(nodes)
   end
 
-  @spec create_test_table() :: :ok
-  def create_test_table do
+  @spec create_test_table(list(Atom.t())) :: :ok
+  def create_test_table(nodes) do
     case :mnesia.create_table(TestTable, [
-           {:disc_copies, @nodes},
+           {:disc_copies, nodes},
            majority: true,
            attributes: [:data1, :data2, :data3, :data4],
            index: [:data3]
@@ -120,14 +121,17 @@ defmodule DatabaseEngine.Mnesia.DbSetup do
       end)
   end
 
-  @spec populate_db() :: term
-  def populate_db do
-    for _ <- 1..100 do
-      Node.spawn(@nodes |> Enum.shuffle() |> hd, fn ->
-        for _ <- 1..10 do
-          insert_test_record()
-        end
-      end)
+  @spec populate_db(list(Atom.t())) :: term
+  def populate_db(nodes) do
+    for _ <- 1..1000 do
+      Utilities.randseed()
+
+      :rpc.call(
+        nodes |> Enum.shuffle() |> hd,
+        DatabaseEngine.Mnesia.DbSetup,
+        :insert_test_record,
+        []
+      )
     end
   end
 end
