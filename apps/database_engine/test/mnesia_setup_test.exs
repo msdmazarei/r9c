@@ -38,13 +38,13 @@ defmodule MnesiaSetupTest do
                :ok = DbSetup.setup_everything()
              end) =~ "database schema is already created."
 
-     # lets populate database with some information
-      
-        nodes = Utilities.allnodes()
-				# populate with 1000 records.
-				DbSetup.populate_db(nodes)
-				# assert the record length is 1000
-				assert 1000 == :mnesia.dirty_all_keys(TestTable) |> length
+      # lets populate database with some information
+
+      nodes = Utilities.allnodes()
+      # populate with 1000 records.
+      DbSetup.populate_db(nodes)
+      # assert the record length is 1000
+      assert 1000 == TestTable |> :mnesia.dirty_all_keys |> length
     end
   end
 end
