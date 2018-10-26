@@ -28,5 +28,3 @@ config :apiserver, Apiserver.Endpoint,
 # If desired, both `http:` and `https:` keys can be
 # configured to run both http and https servers on
 # different ports.
-
-

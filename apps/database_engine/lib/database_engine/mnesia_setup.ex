@@ -35,20 +35,22 @@ defmodule DatabaseEngine.Mnesia.DbSetup do
 
   @spec start_every_mnesia() :: :ok
   def start_every_mnesia do
-    @nodes
-    |> Enum.map(fn n ->
-      Node.spawn(n, __MODULE__, :start_mnesia, [])
-    end)
+    _ =
+      @nodes
+      |> Enum.map(fn n ->
+        Node.spawn(n, __MODULE__, :start_mnesia, [])
+      end)
 
     :ok
   end
 
   @spec stop_every_mnesia() :: :ok
   def stop_every_mnesia do
-    @nodes
-    |> Enum.map(fn n ->
-      Node.spawn(n, __MODULE__, :stop_mnesia, [])
-    end)
+    _ =
+      @nodes
+      |> Enum.map(fn n ->
+        Node.spawn(n, __MODULE__, :stop_mnesia, [])
+      end)
 
     :ok
   end
