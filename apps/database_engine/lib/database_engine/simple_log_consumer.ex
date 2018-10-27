@@ -15,9 +15,7 @@ defmodule DatabaseEngine.DurableQueue.Consumers.SimpleLogConsumer do
     KafkaEx.metadata()
 
     for %Message{value: message} <- message_set do
-      Logging.debug(fn ->
-        "Message:#{message} Deserialized: #{message |> DurableQueue.deserialize()}"
-      end)
+      Logging.debug("Message:#{message} Deserialized: #{message |> DurableQueue.deserialize()}")
     end
 
     {:async_commit, state}

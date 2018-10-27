@@ -8,41 +8,40 @@ defmodule DatabaseEngine.DurableQueue do
   alias Utilities.Logging
 
   def serialize(obj) do
-    Logging.debug(fn -> "Called. with obj: #{obj}" end)
+    Logging.debug("Called. with obj: #{obj}")
     rtn = Serializer.serialize(obj)
 
     case rtn do
       {:ok, serialized} ->
-        Logging.debug(fn ->
-          "Serialized Successfully, Serialized Result: #{serialized}"
-        end)
+        Logging.debug("Serialized Successfully, Serialized Result: #{serialized}")
 
       _ ->
-        Logging.debug(fn -> "Serializer Retuned unexpected result: #{rtn}. Return :nok" end)
+        Logging.debug("Serializer Retuned unexpected result: #{rtn}. Return :nok")
         :nok
     end
   end
 
   def deserialize(string) do
-    Logging.debug(fn -> "Called with parameters: #{string}" end)
+    Logging.debug("Called with parameters: #{string}")
 
     case Serializer.deserialize(string) do
       {:ok, obj} ->
-        Logging.debug(fn -> "Deserialized Successfully, Returns: #{obj}" end)
+        Logging.debug("Deserialized Successfully, Returns: #{obj}")
         obj
 
-      V ->
-        Logging.debug(fn -> "Deserializer Faild, Returned: #{v}" end)
+      v ->
+        Logging.debug("Deserializer Faild, Returned: #{v}")
         nil
     end
   end
 
   def enqueue(topic_name, partition_number, object) do
-    Logging.debug(fn ->
-      "Called with parameters: topic_name: #{topic_name} , partition_number: #{partition_number} object: #{
-        object
-      }"
-    end)
+    Logging.debug("""
+    Called with parameters: 
+      topic_name: #{topic_name}
+      partition_number: #{partition_number}
+      object: #{object}
+    """)
 
     case serialize(object) do
       :nok ->
@@ -51,16 +50,16 @@ defmodule DatabaseEngine.DurableQueue do
 
       serialized ->
         rtn = KafkaEx.produce(topic_name, partition_number, serialized)
-        Logging.debug(fn -> "Return Value: #{rtn}" end)
+        Logging.debug("Return Value: #{rtn}")
         rtn
     end
   end
 
   def enqueue(topic_name, object) do
-    Logging.debug(fn -> "Called with parameters: topic_name: #{topic_name} object: #{object}" end)
+    Logging.debug("Called with parameters: topic_name: #{topic_name} object: #{object}")
 
     #    @fixme: increase round-robin process using process dictionary, increamenting by +1
-    Logging.debug(fn -> "calculating kafka topic partitions ..." end)
+    Logging.debug("calculating kafka topic partitions ...")
 
     partitions =
       KafkaEx.metadata()
@@ -72,13 +71,11 @@ defmodule DatabaseEngine.DurableQueue do
 
     case partitions do
       l when is_list(l) ->
-        Logging.debug(fn -> "calulated partitions for topic: #{topic_name} are: #{l}" end)
+        Logging.debug("calulated partitions for topic: #{topic_name} are: #{l}")
         enqueue(topic_name, hd(l), object)
 
       [] ->
-        Logging.debug(fn ->
-          "no partition found for topic: #{topic_name}, may be there is no topic "
-        end)
+        Logging.debug("no partition found for topic: #{topic_name}, may be there is no topic ")
 
         :ok
     end
@@ -89,14 +86,12 @@ defmodule DatabaseEngine.DurableQueue do
         consumer_group_name,
         consumer_module \\ DatabaseEngine.DurableQueue.Consumers.SimpleLogConsumer
       ) do
-    Logging.debug(fn ->
-      """
-      Called With parameters: 
-      topic_name: #{topic_name} 
-      consumer_group_name: #{consumer_group_name} 
-      consumer_module: #{consumer_module}
-      """
-    end)
+    Logging.debug("""
+    Called With parameters: 
+    topic_name: #{topic_name} 
+    consumer_group_name: #{consumer_group_name} 
+    consumer_module: #{consumer_module}
+    """)
 
     child_spec = %{
       :id => topic_name,
@@ -107,7 +102,7 @@ defmodule DatabaseEngine.DurableQueue do
       :type => :worker
     }
 
-    Logging.debug(fn -> "Call supervisor start child with params: #{child_spec}" end)
+    Logging.debug("Call supervisor start child with params: #{child_spec}")
 
     r =
       DynamicSupervisor.start_child(
@@ -115,7 +110,7 @@ defmodule DatabaseEngine.DurableQueue do
         child_spec
       )
 
-    Logging.debug(fn -> "Returns: #{r}" end)
+    Logging.debug("Returns: #{r}")
     r
   end
 end
