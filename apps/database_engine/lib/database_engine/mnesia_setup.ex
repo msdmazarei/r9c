@@ -128,42 +128,39 @@ defmodule DatabaseEngine.Mnesia.DbSetup do
   """
   @spec create_person_table(list(Atom.t())) :: any()
   def create_person_table(nodes) do
+    case :mnesia.create_table(PersonTb, [
+           {:disc_copies, nodes},
+           {:type, :ordered_set},
+           majority: true,
+           attributes: [:email, :client_data],
+           index: []
+         ]) do
+      {:atomic, :ok} ->
+        Logger.info(fn -> "Person table created." end)
 
-  case :mnesia.create_table(PersonTb, [
-         {:disc_copies, nodes},
-         {:type, :ordered_set},
-         majority: true,
-         attributes: [:email, :client_data],
-         index: []
-       ]) do
-    {:atomic, :ok} ->
-      Logger.info(fn -> "Person table created." end)
-
-    {:aborted, {:already_exists, PersonTb}} ->
-      Logger.debug(fn -> "Person table is available." end)
+      {:aborted, {:already_exists, PersonTb}} ->
+        Logger.debug(fn -> "Person table is available." end)
+    end
   end
-  end
-
 
   @doc """
     creates service table.
   """
   @spec create_service_table(list(Atom.t())) :: any()
   def create_service_table(nodes) do
+    case :mnesia.create_table(ServiceTb, [
+           {:disc_copies, nodes},
+           {:type, :ordered_set},
+           majority: true,
+           attributes: [:idx, :service_data],
+           index: []
+         ]) do
+      {:atomic, :ok} ->
+        Logger.info(fn -> "service table created." end)
 
-  case :mnesia.create_table(ServiceTb, [
-         {:disc_copies, nodes},
-         {:type, :ordered_set},
-         majority: true,
-         attributes: [:idx, :service_data],
-         index: []
-       ]) do
-    {:atomic, :ok} ->
-      Logger.info(fn -> "service table created." end)
-
-    {:aborted, {:already_exists, ServiceTb}} ->
-      Logger.debug(fn -> "service table is available." end)
-  end
+      {:aborted, {:already_exists, ServiceTb}} ->
+        Logger.debug(fn -> "service table is available." end)
+    end
   end
 
   @spec populate_db(list(Atom.t())) :: any()

@@ -8,7 +8,7 @@ defmodule Apiserver.Application do
     # Define workers and child supervisors to be supervised
     children = [
       # Start the endpoint when the application starts
-      supervisor(Apiserver.Endpoint, []),
+      supervisor(Apiserver.Endpoint, [])
       # Start your own worker by calling: Apiserver.Worker.start_link(arg1, arg2, arg3)
       # worker(Apiserver.Worker, [arg1, arg2, arg3]),
     ]
