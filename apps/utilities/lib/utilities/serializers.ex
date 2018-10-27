@@ -1,8 +1,6 @@
 defmodule Utilities.Serializers.JSONSerializer do
   @moduledoc false
 
-
-
   @doc """
   Hello world.
 
@@ -17,14 +15,11 @@ defmodule Utilities.Serializers.JSONSerializer do
 
   """
 
-
   def serialize(object) do
     Jason.encode(object)
   end
 
-
   def deserialize(json_string) do
     Jason.decode(json_string)
   end
-
 end
