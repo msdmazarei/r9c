@@ -1,8 +1,6 @@
 defmodule Utilities.Serializers.JSONSerializer do
   @moduledoc false
 
-
-
   @doc """
   Hello world.
 
@@ -17,6 +15,7 @@ defmodule Utilities.Serializers.JSONSerializer do
 
   """
 
+
   @spec serialize(term) ::
           {:ok, String.t()} | {:error,  Exception.t()}
   def serialize(object) do
@@ -27,5 +26,4 @@ defmodule Utilities.Serializers.JSONSerializer do
   def deserialize(json_string) do
     Jason.decode(json_string)
   end
-
 end
