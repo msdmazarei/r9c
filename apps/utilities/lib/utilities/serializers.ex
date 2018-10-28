@@ -17,12 +17,13 @@ defmodule Utilities.Serializers.JSONSerializer do
 
   """
 
-
+  @spec serialize(term) ::
+          {:ok, String.t()} | {:error,  Exception.t()}
   def serialize(object) do
     Jason.encode(object)
   end
 
-
+  @spec deserialize(string()) :: {:ok, term} | {:error, Exception.t()}
   def deserialize(json_string) do
     Jason.decode(json_string)
   end
