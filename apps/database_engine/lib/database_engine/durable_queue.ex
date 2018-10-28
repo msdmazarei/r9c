@@ -7,6 +7,7 @@ defmodule DatabaseEngine.DurableQueue do
   alias Utilities.Serializers.JSONSerializer, as: Serializer
   alias Utilities.Logging
 
+  @spec serialize(any()) :: String.t() | :nok
   def serialize(obj) do
     Logging.debug("Called. with obj:~p", [obj])
     rtn = Serializer.serialize(obj)
@@ -20,6 +21,7 @@ defmodule DatabaseEngine.DurableQueue do
     end
   end
 
+  @spec deserialize(String.t()) :: term | :nil
   def deserialize(string) do
     Logging.debug("Called with parameters:~p", [string])
     case Serializer.deserialize(string) do
@@ -32,6 +34,7 @@ defmodule DatabaseEngine.DurableQueue do
     end
   end
 
+  @spec enqueue(String.t(), integer(), term) :: :nok | :ok
   def enqueue(topic_name, partition_number, object) do
     Logging.debug(
       "Called with parameters: topic_name:~p , partition_number:~p object:~p",
@@ -51,6 +54,7 @@ defmodule DatabaseEngine.DurableQueue do
 
   end
 
+  @spec enqueue(String.t(), term) :: :ok | :nok
   def enqueue(topic_name, object) do
     Logging.debug("Called with parameters: topic_name:~p object:~p", [topic_name, object])
 
@@ -76,6 +80,13 @@ defmodule DatabaseEngine.DurableQueue do
   end
 
 
+  @spec start_consumer_group(String.t(), String.t(), module()) :: {:ok, pid()}
+                                                          | {:ok, pid(), info :: term()}
+                                                          | :ignore
+                                                            | {
+                                                              :error,
+                                                              {:already_started, pid()} | :max_children | term()
+                                                            }
   def start_consumer_group(
         topic_name,
         consumer_group_name,
