@@ -33,34 +33,34 @@ defmodule GatewayCore.Application do
       add_gsm_modem(modem)
     end
 
-    gsm_gateway  = Application.get_env(:gateway_core,:gsm_gateway)
-    Logging.debug("Config for gsm_gateway:~p",[gsm_gateway])
+    gsm_gateway = Application.get_env(:gateway_core, :gsm_gateway)
+    Logging.debug("Config for gsm_gateway:~p", [gsm_gateway])
     if gsm_gateway != :nil do
-      Logging.debug("gsm_gateway is not nil so check output queue, output queue: ~p",[ gsm_gateway[:q_out] ])
-        if gsm_gateway[:q_out] != :nil do
-          Logging.debug("gsm_gateway has output gateway so start its consumer...")
-          DatabaseEngine.DurableQueue.start_consumer_group(
-            gsm_gateway[:q_out] ,
-            gsm_gateway[:q_out] <> "_consumer" ,
-            GatewayCore.Drivers.GsmModemDriver.Output
+      Logging.debug("gsm_gateway is not nil so check output queue, output queue: ~p", [gsm_gateway[:q_out]])
+      if gsm_gateway[:q_out] != :nil do
+        Logging.debug("gsm_gateway has output queue so start its consumer...")
+        DatabaseEngine.DurableQueue.start_consumer_group(
+          gsm_gateway[:q_out],
+          gsm_gateway[:q_out] <> "_consumer",
+          GatewayCore.Drivers.GsmModemDriver.Output
+        )
+      end
+
+      if gsm_gateway[:q_in] != :nil do
+        Logging.debug("gsm_gateway has input queue so register to all incomping messages from modems...")
+        for {_, p, _, _} <- DynamicSupervisor.which_children(GatewayCore.GSMModemGateway.Supervisor) do
+          :simple_gsm_modem_over_tcp.register_to_inform_every_message(
+            p,
+            GatewayCore.Drivers.GsmModemDriver.Input,
+            :receive_sms,
+            [gsm_gateway[:q_in] ]
           )
         end
+
+      end
     end
 
 
-    for {_, p, _, _} <- DynamicSupervisor.which_children(GatewayCore.GSMModemGateway.Supervisor) do
-      #      register_handler(Pid, SENDER_Regex, TXTRegex, SUCCESSMODULE, SUCCESSFUNC, SUCCESSARGS, FAILMODULE, FAILFUNC, FAILARGS, TIMEOUT) ->
-      :simple_gsm_modem_over_tcp.register_handler(
-        p,
-        :binary.bin_to_list("989360076133"),
-        :binary.bin_to_list("salam"),
-        GatewayCore.Drivers.GsmModemDriver,
-        :sms_received,[],
-        :erlang,
-        :fwrite,[],
-        1999999999
-      )
-    end
 
   end
 
