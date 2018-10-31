@@ -12,8 +12,9 @@ defmodule GatewayCore.Drivers.GsmModemDriver.Output do
     defstruct partition: 0, topic: ""
   end
 
-  def init(_topic, _partition) do
-    {:ok, %State {partition: _partition, topic: _topic}}
+  @impl true
+  def init(topic, partition) do
+    {:ok, %State {partition: partition, topic: topic}}
   end
 
 
@@ -45,3 +46,29 @@ defmodule GatewayCore.Drivers.GsmModemDriver.Output do
 
 
 end
+
+defmodule GatewayCore.Drivers.GsmModemDriver.Input do
+  require Logger
+  require Utilities.Logging
+  alias Utilities.Logging
+#  alias DatabaseEngine.DurableQueue
+  def receive_sms(:nil, m) do
+    Logging.debug("Called. with param: q_in:nil , message:~p",[m])
+  end
+  def receive_sms(q_in, m = {:normal_message,sender,body,arrive_epoch,_} ) do
+    Logging.debug("Called With Params: q_in:~p message:~p",[q_in,m])
+    body = :unicode.characters_to_binary(body,:utf16,:unicode)
+    sms = %DatabaseEngine.Models.SMS{
+      sender: sender,
+      received_epoch: arrive_epoch,
+      body: body
+    }
+    DatabaseEngine.DurableQueue.enqueue(q_in,sms)
+  end
+  def receive_sms(q_in, m) do
+    Logging.debug("Called. with param: q_in:nil , message:~p --- UNKNOWN ",[q_in,m])
+  end
+
+
+end
+

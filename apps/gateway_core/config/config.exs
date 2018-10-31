@@ -31,7 +31,7 @@ use Mix.Config
 config :gateway_core,
   gsm_gateway:
     [
-    q_in: 1,
+    q_in: "gsm_input",
     q_out: "gsm_output"
   ],
   modems: [{"127.0.0.1",3285}]
