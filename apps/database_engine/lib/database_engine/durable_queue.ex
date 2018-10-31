@@ -9,12 +9,12 @@ defmodule DatabaseEngine.DurableQueue do
 
   @spec serialize(any()) :: String.t() | :nok
   def serialize(obj) do
-    Logging.debug("Called. with obj: #{obj}")
+    Logging.debug("Called. with obj: ~p",[obj])
     rtn = Serializer.serialize(obj)
 
     case rtn do
       {:ok, serialized} ->
-        Logging.debug("Serialized Successfully, Serialized Result: #{serialized}")
+        Logging.debug("Serialized Successfully, Serialized Result: ~p",[serialized])
         serialized
 
       _ ->
@@ -29,23 +29,25 @@ defmodule DatabaseEngine.DurableQueue do
 
     case Serializer.deserialize(string) do
       {:ok, obj} ->
-        Logging.debug("Deserialized Successfully, Returns: #{obj}")
+        Logging.debug("Deserialized Successfully, Returns: ~p",[obj])
         obj
 
       v ->
-        Logging.debug("Deserializer Faild, Returned: #{v}")
+        Logging.debug("Deserializer Faild, Returned: ~p",[v])
         nil
     end
   end
 
-  @spec enqueue(String.t(), integer(), term) :: :nok | :ok
+  @spec enqueue(String.t(), integer(), any) :: :nok | :ok
   def enqueue(topic_name, partition_number, object) do
-    Logging.debug("""
-    Called with parameters: 
-      topic_name: #{topic_name}
-      partition_number: #{partition_number}
-      object: #{object}
-    """)
+    Logging.debug(
+      """
+      Called with parameters:
+        topic_name: #{topic_name}
+        partition_number: #{partition_number}
+        object: ~p
+      """,[object]
+    )
 
     case serialize(object) do
       :nok ->
@@ -53,16 +55,18 @@ defmodule DatabaseEngine.DurableQueue do
         :nok
 
       serialized ->
-        Logging.debug("Calling Kafka Produce topic_name:#{topic_name} partition_number:#{partition_number} serialized:#{serialized}")
+        Logging.debug(
+          "Calling Kafka Produce topic_name:#{topic_name} partition_number:#{partition_number} serialized:#{serialized}"
+        )
         rtn = KafkaEx.produce(topic_name, partition_number, serialized)
         Logging.debug("Return Value: #{rtn}")
         rtn
     end
   end
 
-  @spec enqueue(String.t(), term) :: :ok | :nok
+  @spec enqueue(String.t(), any) :: :ok | :nok
   def enqueue(topic_name, object) do
-    Logging.debug("Called with parameters: topic_name: #{topic_name} object: #{object}")
+    Logging.debug("Called with parameters: topic_name: #{topic_name} object: ~p",[object])
 
     #    @fixme: increase round-robin process using process dictionary, increamenting by +1
     Logging.debug("calculating kafka topic partitions ...")
@@ -89,34 +93,36 @@ defmodule DatabaseEngine.DurableQueue do
 
 
   @spec start_consumer_group(String.t(), String.t(), module()) :: {:ok, pid()}
-                                                          | {:ok, pid(), info :: term()}
-                                                          | :ignore
-                                                            | {
-                                                              :error,
-                                                              {:already_started, pid()} | :max_children | term()
-                                                            }
+                                                                  | {:ok, pid(), info :: term()}
+                                                                  | :ignore
+                                                                    | {
+                                                                      :error,
+                                                                      {:already_started, pid()} | :max_children | term()
+                                                                    }
   def start_consumer_group(
         topic_name,
         consumer_group_name,
         consumer_module \\ DatabaseEngine.DurableQueue.Consumers.SimpleLogConsumer
       ) do
-    Logging.debug("""
-    Called With parameters: 
-    topic_name: #{topic_name} 
-    consumer_group_name: #{consumer_group_name} 
-    consumer_module: #{consumer_module}
-    """)
+    Logging.debug(
+      """
+      Called With parameters:
+      topic_name: #{topic_name}
+      consumer_group_name: #{consumer_group_name}
+      consumer_module: #{consumer_module}
+      """
+    )
 
     child_spec = %{
       :id => topic_name,
       :start =>
         {KafkaEx.ConsumerGroup, :start_link,
-         [consumer_module, consumer_group_name, [topic_name], []]},
+        [consumer_module, consumer_group_name, [topic_name], []]},
       :restart => :permanent,
       :type => :worker
     }
 
-    Logging.debug("Call supervisor start child with params: ~p",[child_spec])
+    Logging.debug("Call supervisor start child with params: ~p", [child_spec])
 
     r =
       DynamicSupervisor.start_child(
@@ -124,7 +130,7 @@ defmodule DatabaseEngine.DurableQueue do
         child_spec
       )
 
-    Logging.debug("Returns: ~p",[r])
+    Logging.debug("Returns: ~p", [r])
     r
   end
 end
