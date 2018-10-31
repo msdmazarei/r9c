@@ -16,7 +16,7 @@ defmodule DatabaseEngine.DurableQueue.Consumers.SimpleLogConsumer do
 #      Process.sleep(10000)
 
     for %Message{value: message} <- message_set do
-      Logging.debug("Message:#{message} Deserialized: #{message |> DurableQueue.deserialize()}")
+      Logging.debug("Message:#{message} Deserialized: ~p",[message |> DurableQueue.deserialize()])
     end
 
     {:async_commit, state}
