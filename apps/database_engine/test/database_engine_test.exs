@@ -1,8 +1,11 @@
 defmodule DatabaseEngineTest do
-  use ExUnit.Case
+  use ExUnit.Case, async: true
+
   doctest DatabaseEngine
 
-  test "greets the world" do
-    assert DatabaseEngine.hello() == :world
+  describe "basic stuff" do
+    test "greets the world" do
+      assert DatabaseEngine.hello() == :world
+    end
   end
 end

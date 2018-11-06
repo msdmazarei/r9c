@@ -22,10 +22,24 @@
 - You can alternativly can clone red9-binaries and get [ready to use ova file](https://gitman.ir/sPod/red9-binaries) and import it in your VM.
 
 ## Starting platform
-```
-mix do clean, deps.clean --all, deps.get, deps.compile, compile, digest
-mix phx.server
 
+```bash
+mix do clean, deps.clean --all, deps.get, deps.compile, compile, digest
+```
+
+
+We need at least 3 servers to start development:
+
+```bash
+iex --name [a|b|c]@127.0.0.1 --cookie 123 -S mix
+```
+
+
+Then you need to setup mnesia database. From node a:
+
+```elixir
+:ok = DatabaseEngine.Mnesia.DbSetup.delete_schema()
+:ok = DatabaseEngine.Mnesia.DbSetup.setup_everything()
 ```
 
 ## Building binaries

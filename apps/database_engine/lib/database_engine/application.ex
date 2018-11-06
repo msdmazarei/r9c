@@ -10,6 +10,7 @@ defmodule DatabaseEngine.Application do
     children = [
       # Starts a worker by calling: DatabaseEngine.Worker.start_link(arg)
       # {DatabaseEngine.Worker, arg},
+      {DatabaseEngine.DurableQueue.ConsumerGroupWorkers.Supervisor,[]}
     ]
 
     # See https://hexdocs.pm/elixir/Supervisor.html

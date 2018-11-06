@@ -26,6 +26,7 @@ defmodule Utilities.MixProject do
   # Run "mix help deps" to learn about dependencies.
   defp deps do
     [
+      {:libcluster, "~> 3.0"},
       {:persian, "~> 0.1.4"},
       {:elixir_uuid, "~> 1.2"},
       {:jalaali, "~> 0.2"}
