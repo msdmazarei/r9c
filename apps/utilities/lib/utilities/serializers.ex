@@ -15,9 +15,7 @@ defmodule Utilities.Serializers.JSONSerializer do
 
   """
 
-
-  @spec serialize(term) ::
-          {:ok, String.t()} | {:error,  Exception.t()}
+  @spec serialize(term) :: {:ok, String.t()} | {:error, Exception.t()}
   def serialize(object) do
     Jason.encode(object)
   end
