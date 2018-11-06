@@ -29,9 +29,8 @@ use Mix.Config
 #
 #     import_config "#{Mix.env()}.exs"
 config :gateway_core,
-  gsm_gateway:
-    [
+  gsm_gateway: [
     q_in: "gsm_input",
     q_out: "gsm_output"
   ],
-  modems: [{"127.0.0.1",3285}]
+  modems: [{"127.0.0.1", 3285}]
