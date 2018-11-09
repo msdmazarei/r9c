@@ -123,7 +123,6 @@ defmodule DatabaseEngine.DurableQueue do
     }
 
     Logging.debug("Call supervisor start child with params: ~p", [child_spec])
-
     r =
       DynamicSupervisor.start_child(
         DatabaseEngine.DurableQueue.ConsumerGroupWorkers.Supervisor,
@@ -132,5 +131,9 @@ defmodule DatabaseEngine.DurableQueue do
 
     Logging.debug("Returns: ~p", [r])
     r
+  end
+  def stop_consumer_group(pid) do
+    DynamicSupervisor.terminate_child(DatabaseEngine.DurableQueue.ConsumerGroupWorkers.Supervisor,
+                                                                                      pid)
   end
 end
