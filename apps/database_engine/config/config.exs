@@ -89,11 +89,15 @@ config :kafka_ex,
   use_ssl: false,
   # see SSL OPTION DESCRIPTIONS - CLIENT SIDE at http://erlang.org/doc/man/ssl.html
   # for supported options
-  ssl_options: [
-    cacertfile: System.cwd() <> "/ssl/ca-cert",
-    certfile: System.cwd() <> "/ssl/cert.pem",
-    keyfile: System.cwd() <> "/ssl/key.pem"
-  ],
+  ssl_options: [],
   # set this to the version of the kafka broker that you are using
   # include only major.minor.patch versions.  must be at least 0.8.0
   kafka_version: "0.10.1"
+
+config :couchdb_connector,
+  props: %{
+    protocol: "http",
+    hostname: "localhost",
+    database: "red9_cobra_#{Mix.env()}",
+    port: 5984
+  }

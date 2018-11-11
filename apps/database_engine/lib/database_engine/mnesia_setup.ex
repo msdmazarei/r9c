@@ -92,7 +92,7 @@ defmodule DatabaseEngine.Mnesia.DbSetup do
   @spec create_test_table(list(Atom.t())) :: :ok
   def create_test_table(nodes) do
     case :mnesia.create_table(TestTable, [
-           {:disc_copies, nodes},
+           {:ram_copies, nodes},
            majority: true,
            attributes: [:data1, :data2, :data3, :data4],
            index: [:data3]
@@ -129,7 +129,7 @@ defmodule DatabaseEngine.Mnesia.DbSetup do
   @spec create_person_table(list(Atom.t())) :: any()
   def create_person_table(nodes) do
     case :mnesia.create_table(PersonTb, [
-           {:disc_copies, nodes},
+           {:ram_copies, nodes},
            {:type, :ordered_set},
            majority: true,
            attributes: [:email, :client_data],
@@ -149,11 +149,11 @@ defmodule DatabaseEngine.Mnesia.DbSetup do
   @spec create_service_table(list(Atom.t())) :: any()
   def create_service_table(nodes) do
     case :mnesia.create_table(ServiceTb, [
-           {:disc_copies, nodes},
+           {:ram_copies, nodes},
            {:type, :ordered_set},
            majority: true,
-           attributes: [:idx, :service_data],
-           index: []
+           attributes: [:idx, :status, :offline_key, :type, :subscribers, :options],
+           index: [:status, :type]
          ]) do
       {:atomic, :ok} ->
         Logger.info(fn -> "service table created." end)

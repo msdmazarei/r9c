@@ -6,6 +6,7 @@ defmodule DatabaseEngine.Application do
   use Application
 
   def start(_type, _args) do
+    DatabaseEngine.Couchdb.db_setup()
     # List all child processes to be supervised
     children = [
       # Starts a worker by calling: DatabaseEngine.Worker.start_link(arg)
