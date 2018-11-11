@@ -47,4 +47,20 @@ defmodule Utilities do
   def allnodes() do
     Node.list() ++ [node()]
   end
+
+  def to_erl_list(x) do
+    if is_binary(x) do
+      :binary.bin_to_list(x)
+    else
+      x
+    end
+  end
+
+  def erl_list_to_iex_string(x) do
+    if is_list(x) do
+      :binary.list_to_bin(x)
+    else
+      x
+    end
+  end
 end
