@@ -14,17 +14,6 @@ defmodule DatabaseEngine.Mnesia.DbSetup do
   # @data File.read!("/Users/rodmena/Movies/BW-Scroll.mp4") |> Base.encode64
   #
 
-  @spec setup_everything() :: :ok
-  def setup_everything do
-    nodes = Utilities.all_active_nodes()
-    create_schema(nodes)
-    Logger.info(fn -> "schema created. Loading ..." end)
-    Process.sleep(@wait_time)
-    create_test_table(nodes)
-    create_person_table(nodes)
-    :ok
-  end
-
   @spec stop_mnesia() :: :stopping
   def stop_mnesia do
     :stopped = :mnesia.stop()
@@ -92,7 +81,7 @@ defmodule DatabaseEngine.Mnesia.DbSetup do
   @spec create_test_table(list(Atom.t())) :: :ok
   def create_test_table(nodes) do
     case :mnesia.create_table(TestTable, [
-           {:ram_copies, nodes},
+           {:disc_copies, nodes},
            majority: true,
            attributes: [:data1, :data2, :data3, :data4],
            index: [:data3]
@@ -122,45 +111,64 @@ defmodule DatabaseEngine.Mnesia.DbSetup do
       end)
   end
 
-  @doc """
-    creates person table.  Key is client email address. second element is
-    client data struct.
-  """
-  @spec create_person_table(list(Atom.t())) :: any()
-  def create_person_table(nodes) do
-    case :mnesia.create_table(PersonTb, [
-           {:ram_copies, nodes},
-           {:type, :ordered_set},
-           majority: true,
-           attributes: [:email, :client_data],
-           index: []
-         ]) do
-      {:atomic, :ok} ->
-        Logger.info(fn -> "Person table created." end)
+  ############################# SDP TABLES #############################
+  @table_config [
+    {ClientTb, [:idx, :blacklist_services, :blacklist_gateways, :options, :_internal]},
+    {MembershipTb, [:idx, :source_idx, :target_idx, :scope_idx]},
+    {NetAclTb, [:idx, :cidr_idx, :action_idx, :_internal]},
+    {CelTb, [:idx, :cel]},
+    {GatewayTb, [:idx, :type_idx, :cel_id, :options, :_internal]},
+    {ServiceTb, [:idx, :type_idx, :cel_id, :whitelist, :options, :_internal]},
+    {AppTb, [:idx, :service_idx, :apikeys, :options, :_internal]},
+    {ApikeyTb, [:idx, :key_idx, :net_acl_idx, :options, :_internal]},
+    {MsgTb, [:idx, :correlator, :flag_idx]},
+    {ChargeTb, [:idx, :correlator, :flag_idx]},
+    {EmailTb, [:idx, :correlator, :flag_idx]},
+    {OTPTb, [:idx, :correlator, :flag_idx]},
+    {SubscriptionTb,
+     [
+       :idx,
+       :service_idx,
+       :client_idx,
+       :start_unixtime,
+       :end_unixtime,
+       :status_idx,
+       :correlator,
+       :flag_idx
+     ]},
+    {EventTb, [:idx, :correlator_idx]}
+  ]
 
-      {:aborted, {:already_exists, PersonTb}} ->
-        Logger.debug(fn -> "Person table is available." end)
+  def create_tables do
+    for tdata <- @table_config do
+      name = tdata |> elem(0)
+      attrs = tdata |> elem(1)
+      idxs = attrs |> Enum.filter(fn x -> x |> to_string |> String.ends_with?("_idx") end)
+
+      case :mnesia.create_table(name, [
+             {:disc_copies, Utilities.all_active_nodes()},
+             {:type, :ordered_set},
+             majority: true,
+             attributes: attrs,
+             index: idxs
+           ]) do
+        {:atomic, :ok} ->
+          Logger.info(fn -> "#{name} table created." end)
+
+        {:aborted, {:already_exists, name}} ->
+          Logger.debug(fn -> "#{name} table is available." end)
+      end
     end
   end
 
-  @doc """
-    creates service table.
-  """
-  @spec create_service_table(list(Atom.t())) :: any()
-  def create_service_table(nodes) do
-    case :mnesia.create_table(ServiceTb, [
-           {:ram_copies, nodes},
-           {:type, :ordered_set},
-           majority: true,
-           attributes: [:idx, :status, :offline_key, :type, :subscribers, :options],
-           index: [:status, :type]
-         ]) do
-      {:atomic, :ok} ->
-        Logger.info(fn -> "service table created." end)
-
-      {:aborted, {:already_exists, ServiceTb}} ->
-        Logger.debug(fn -> "service table is available." end)
-    end
+  @spec initialize() :: :ok
+  def initialize do
+    nodes = Utilities.all_active_nodes()
+    create_schema(nodes)
+    Logger.info(fn -> "schema created. Loading ..." end)
+    Process.sleep(@wait_time)
+    # create_tables()
+    :ok
   end
 
   @spec populate_db(list(Atom.t())) :: any()
