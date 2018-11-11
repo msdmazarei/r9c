@@ -1,6 +1,6 @@
 use Mix.Config
 
-config :red9cobra, Red9Cobra.IMI,
+config :gateway_core, Red9Cobra.IMI,
   max_charge_retries: 10,
   name: "IMI",
   max_charge_amount_per_day_user: 500,
@@ -12,12 +12,12 @@ config :red9cobra, Red9Cobra.IMI,
   # client_host: "10.20.197.211",
 
   # SMS CENTER
-  sms_center_host: (System.get_env("IMI_SMS_CENTER_HOSTS") || "localhost") |> String.split(","),
-  sms_center_port: System.get_env("IMI_SMS_CENTER_PORT") || "9000",
-  sms_center_request_scheme: System.get_env("IMI_SMS_CENTER_SCHEME") || "http",
+  sms_center_host: (System.get_env("IMI_SMS_CENTER_HOSTS") || "imi.red9.ir") |> String.split(","),
+  sms_center_port: System.get_env("IMI_SMS_CENTER_PORT") || "443",
+  sms_center_request_scheme: System.get_env("IMI_SMS_CENTER_SCHEME") || "https",
 
   # Basic cmVkOTpBODg5OWdoanRyZQ==
-  sms_center_auth: System.get_env("IMI_SMS_CENTER_AUTH"),
+  sms_center_auth: System.get_env("IMI_SMS_CENTER_AUTH") || "Basic cmVkOTpBODg5OWdoanRyZQ==",
   # FTP TOOL
   ftp_endpoint: System.get_env("IMI_FTP_ENDPOINT"),
 
@@ -26,13 +26,15 @@ config :red9cobra, Red9Cobra.IMI,
   code51_token: System.get_env("CODE51_TOKEN"),
 
   # THIS MACHINE
-  client_host: System.get_env("IMI_HOST_IP"),
-  client_port: System.get_env("IMI_HOST_PORT"),
-  delivery_endpoint_scheme: System.get_env("IMI_HOST_SCHEME"),
+  client_host: System.get_env("IMI_HOST_IP") || "127.0.0.1",
+  client_port: System.get_env("IMI_HOST_PORT") || "8000",
+  delivery_endpoint_scheme: System.get_env("IMI_HOST_SCHEME") || "http",
   devivery_address_template: "/delivery/<%= service_name %>/<%= method %>",
+  http_timeout: System.get_env("IMI_WSDL_TIMEOUT"),
   wsdl_action_endpoint: "http://www.csapi.org/wsdl/parlayx",
   methods: %{
     send_sms_without_charge: %{
+      timeout: 100_000,
       action: "/sms/send/v4_0/service/SendSms/sendSmsRequest",
       call_method: "parlayxsmsgw/services/SendSmsService/",
       template: """
