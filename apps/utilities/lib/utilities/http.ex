@@ -2,7 +2,15 @@ defmodule Utilities.HTTP1_1 do
   @moduledoc ""
   require Logger
   require Utilities.Logging
+  require DatabaseEngine.DurableQueue
   alias Utilities.Logging
+
+  @compile {:inline, authotization_header: 2}
+  @compile {:inline, header: 2}
+  @compile {:inline, authotization_header: 1}
+
+  @http_config Application.get_env(:utilities, HTTP)
+  @http_log_queue @http_config[:log_queue]
 
   @type method() :: :head | :get | :put | :post | :trace | :options | :delete | :patch
   @type key_value_list() :: [{String.t(), String.t()}]
@@ -64,12 +72,26 @@ defmodule Utilities.HTTP1_1 do
         headers \\ [],
         content_type \\ nil,
         body \\ nil,
-        http_options \\ []
+        http_options \\ [],
+        id \\ nil
       ) do
     Logging.debug(
       "Called With Params: method:~p url:~p headers:~p content-type:~p http-options:~p",
       [method, url, headers, content_type, http_options]
     )
+
+    http_options =
+      if @http_config[:timeout] != nil do
+        case List.keyfind(http_options, :timeout, 0) do
+          nil ->
+            [{:timeout, @http_config[:timeout]} | http_options]
+
+          _ ->
+            http_options
+        end
+      else
+        http_options
+      end
 
     Logging.debug("converting elixir string to erlang string")
     url = Utilities.to_erl_list(url)
@@ -81,18 +103,36 @@ defmodule Utilities.HTTP1_1 do
     r =
       case body do
         n when n in ['', "", nil] ->
-          Logging.debug("Call HTTP Target without body.")
           request = {url, headers}
+          Logging.debug("Call HTTP Target without body. request:~p", [request])
+
+          if @http_log_queue != nil do
+            :ok =
+              DatabaseEngine.DurableQueue.enqueue(
+                @http_log_queue,
+                Utilities.nested_tuple_to_list({:request, id, request})
+              )
+          end
+
           :httpc.request(method, request, http_options, httpc_options())
 
         _ ->
-          Logging.debug("Call HTTP Target with body.")
           request = {url, headers, content_type, body}
+          Logging.debug("Call HTTP Target with body. request:~p", [request])
+
+          if @http_log_queue != nil do
+            :ok =
+              DatabaseEngine.DurableQueue.enqueue(
+                @http_log_queue,
+                Utilities.nested_tuple_to_list({:request, id, request})
+              )
+          end
+
           :httpc.request(method, request, http_options, httpc_options())
       end
 
     case r do
-      {:ok, {{_http_version, status_code, reason_phrase}, resp_headers, resp_body}} ->
+      {:ok, {{_http_version, status_code, _reason_phrase}, resp_headers, resp_body}} ->
         Logging.debug(
           "Http Endpoint respond and we are converting erlang string to elixir string"
         )
@@ -120,11 +160,30 @@ defmodule Utilities.HTTP1_1 do
               resp_body
           end
 
-        Logging.debug("Return Result")
-        {:ok, status_code, resp_headers, resp_body}
+        result = {:ok, status_code, resp_headers, resp_body}
+
+        Logging.debug("Return Res:~p", [result])
+
+        if @http_log_queue != nil do
+          :ok =
+            DatabaseEngine.DurableQueue.enqueue(
+              @http_log_queue,
+              Utilities.nested_tuple_to_list({:response, id, result})
+            )
+        end
+
+        result
 
       {:error, reason} ->
         Logging.debug("There is a problem to HTTP Endpoint, Reason:~p", [reason])
+
+        if @http_log_queue != nil do
+          :ok =
+            DatabaseEngine.DurableQueue.enqueue(
+              @http_log_queue,
+              Utilities.nested_tuple_to_list({:response, id, {:error, reason}})
+            )
+        end
 
         case reason do
           {:failed_connect, l} when is_list(l) ->
@@ -147,14 +206,14 @@ defmodule Utilities.HTTP1_1 do
           | {:error, :failed_connect}
           | {:error, :timeout}
           | {:error, any()}
-  def post(url, headers \\ [], content_type, body, timeout \\ 100_000) do
+  def post(url, headers \\ [], content_type, body, timeout \\ nil, id \\ nil) do
     Logging.debug("Called With params: url:~p content_type:~p timeout:~p", [
       url,
       content_type,
       timeout
     ])
 
-    send_http_request(:post, url, headers, content_type, body, [{:timeout, timeout}])
+    send_http_request(:post, url, headers, content_type, body, [{:timeout, timeout}], id)
   end
 
   @spec wsdl(url(), String.t(), headers(), integer) ::
@@ -162,11 +221,11 @@ defmodule Utilities.HTTP1_1 do
           | {:error, :failed_connect}
           | {:error, :timeout}
           | {:error, any()}
-  def wsdl(url, action, headers \\ [], body, timeout \\ 100_000) do
+  def wsdl(url, action, headers \\ [], body, timeout \\ nil, id \\ nil) do
     Logging.debug("Called url:~p action:~p headers:~p timeout:~p", [url, action, headers, timeout])
 
     headers = [{"SOAPAction", action} | headers]
-    post(url, headers, "text/xml;charset=UTF-8", body, timeout)
+    post(url, headers, "text/xml;charset=UTF-8", body, timeout, id)
   end
 
   @spec get(url(), headers(), integer) ::
@@ -177,5 +236,20 @@ defmodule Utilities.HTTP1_1 do
   def get(url, headers, timeout \\ 100_000) do
     Logging.debug("Called url:~p headers:~p timeout:~p", [url, headers, timeout])
     send_http_request(:get, url, headers, nil, nil, [{:timeout, timeout}])
+  end
+
+  @spec header(field(), value()) :: header()
+  def header(field, value) do
+    {field, value}
+  end
+
+  @spec authotization_header(:basic | :bearer, value()) :: header()
+  def authotization_header(type, value) do
+    header("Authorization", to_string(type) <> " " <> value)
+  end
+
+  @spec authotization_header(value()) :: header()
+  def authotization_header(value) do
+    header("Authorization", value)
   end
 end
