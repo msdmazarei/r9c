@@ -141,4 +141,41 @@ defmodule Utilities.HTTP1_1 do
         end
     end
   end
+
+  @spec post(url(), headers(), content_type(), body(), integer()) ::
+          {:ok, status_code(), headers(), body()}
+          | {:error, :failed_connect}
+          | {:error, :timeout}
+          | {:error, any()}
+  def post(url, headers \\ [], content_type, body, timeout \\ 100_000) do
+    Logging.debug("Called With params: url:~p content_type:~p timeout:~p", [
+      url,
+      content_type,
+      timeout
+    ])
+
+    send_http_request(:post, url, headers, content_type, body, [{:timeout, timeout}])
+  end
+
+  @spec wsdl(url(), String.t(), headers(), integer) ::
+          {:ok, status_code(), headers(), body()}
+          | {:error, :failed_connect}
+          | {:error, :timeout}
+          | {:error, any()}
+  def wsdl(url, action, headers \\ [], body, timeout \\ 100_000) do
+    Logging.debug("Called url:~p action:~p headers:~p timeout:~p", [url, action, headers, timeout])
+
+    headers = [{"SOAPAction", action} | headers]
+    post(url, headers, "text/xml;charset=UTF-8", body, timeout)
+  end
+
+  @spec get(url(), headers(), integer) ::
+          {:ok, status_code(), headers(), body()}
+          | {:error, :failed_connect}
+          | {:error, :timeout}
+          | {:error, any()}
+  def get(url, headers, timeout \\ 100_000) do
+    Logging.debug("Called url:~p headers:~p timeout:~p", [url, headers, timeout])
+    send_http_request(:get, url, headers, nil, nil, [{:timeout, timeout}])
+  end
 end
