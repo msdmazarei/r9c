@@ -113,6 +113,10 @@ defmodule DatabaseEngine.Mnesia.DbSetup do
 
   ############################# SDP TABLES #############################
   @table_config [
+    {AuthUserTb, [:idx, :key_idx, :domain_idx, :options, :_internal]},
+    {AuthGroupTb, [:idx, :name_idx]},
+    {AuthMembershipTb, [:idx, :user_idx, :group_idx]},
+    {AuthPermissionTb, [:idx, :group_idx, :role_idx]},
     {ClientTb, [:idx, :blacklist_services, :blacklist_gateways, :options, :_internal]},
     {MembershipTb, [:idx, :source_idx, :target_idx, :scope_idx]},
     {NetAclTb, [:idx, :cidr_idx, :action_idx, :_internal]},
@@ -121,10 +125,6 @@ defmodule DatabaseEngine.Mnesia.DbSetup do
     {ServiceTb, [:idx, :type_idx, :cel_id, :whitelist, :options, :_internal]},
     {AppTb, [:idx, :service_idx, :apikeys, :options, :_internal]},
     {ApikeyTb, [:idx, :key_idx, :net_acl_idx, :options, :_internal]},
-    {MsgTb, [:idx, :correlator, :flag_idx]},
-    {ChargeTb, [:idx, :correlator, :flag_idx]},
-    {EmailTb, [:idx, :correlator, :flag_idx]},
-    {OTPTb, [:idx, :correlator, :flag_idx]},
     {SubscriptionTb,
      [
        :idx,
@@ -136,7 +136,8 @@ defmodule DatabaseEngine.Mnesia.DbSetup do
        :correlator,
        :flag_idx
      ]},
-    {EventTb, [:idx, :correlator_idx]}
+    {EventTb, [:idx, :correlator_idx]},
+    {KVTb, [:idx, :key_idx, :value]}
   ]
 
   def create_tables do

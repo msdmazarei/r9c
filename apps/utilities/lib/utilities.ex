@@ -47,4 +47,11 @@ defmodule Utilities do
   def all_active_nodes() do
     Node.list() ++ [node()]
   end
+
+  @doc """
+  gets unixtime
+  """
+  def now do
+    DateTime.utc_now() |> DateTime.to_unix(:millisecond)
+  end
 end

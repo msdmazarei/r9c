@@ -12,6 +12,21 @@ defmodule DatabaseEngine.Models do
   end
 end
 
+defmodule DatabaseEngine.Struct.AuthUser do
+  @moduledoc """
+    every user will have this struct
+  """
+  @derive Jason.Encoder
+  @enforce_keys [:key, :name, :company, :contact_number, :email, :domain]
+  defstruct key: nil,
+            name: nil,
+            idx: nil,
+            company: nil,
+            contact_number: nil,
+            email: nil,
+            domain: nil
+end
+
 defmodule DatabaseEngine.Struct.Service.VAS do
   @moduledoc """
     This struct contains options of a service as defined in
@@ -67,9 +82,10 @@ defmodule DatabaseEngine.Struct.Service.VAS do
 end
 
 defmodule DatabaseEngine.Struct.TableInternalData do
-  defstruct timestamp: nil,
+  @enforce_keys [:unixtime]
+  defstruct unixtime: nil,
             modifier: nil,
-            last_modification_timestamp: nil
+            last_modification_unixtime: nil
 end
 
 defmodule DatabaseEngine.Struct.Gateway do
@@ -85,7 +101,7 @@ defmodule DatabaseEngine.Struct.NetACL do
             blacklist_cidrs: []
 end
 
-defmodule DatabaseEngine.Struct.App do
+defmodule DatabaseEngine.Struct.App.VAS do
   @derive Jason.Encoder
   @enforce_keys []
   defstruct mo_callback_url: nil,
