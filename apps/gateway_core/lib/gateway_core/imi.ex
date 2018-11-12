@@ -11,7 +11,7 @@ defmodule GatewayCore.Outputs.IMI do
   @wsdl_action_endpoint @gateway_config[:wsdl_action_endpoint]
   @basic_auth @gateway_config[:sms_center_auth]
 
-  @spec send_sms_to_gw(%DatabaseEngine.Models.SMS{}) :: :ok
+  @spec send_sms_to_gw(%DatabaseEngine.Models.SMS{}) :: boolean()
   def send_sms_to_gw(
         sms_to_send = %DatabaseEngine.Models.SMS{
           options: %{:imi_service_key => service_key, :imi_sms_type => sms_type}
@@ -20,7 +20,49 @@ defmodule GatewayCore.Outputs.IMI do
     timeout = get_timeout(sms_type)
     {:ok, body_to_send, action, _} = get_send_sms_post_data(sms_to_send)
     url = get_call_url(sms_type)
+    headers = get_request_headers(sms_to_send, service_key)
 
+    {:ok, status_code, _, _} =
+      Utilities.HTTP1_1.wsdl(url, action, headers, body_to_send, timeout, sms_to_send.id)
+
+    if status_code > 199 && status_code < 300 do
+      Logging.info("sms.id:~p sent successfully", [sms_to_send.id])
+      true
+    else
+      Logging.warn("sms.id:~p sent failed, status_code:~p", [sms_to_send.id, status_code])
+      false
+    end
+  end
+
+  def gw_init() do
+    Logging.debug("Called")
+    []
+  end
+
+  def gw_queue_list() do
+    Logging.debug("Called")
+
+    r = [
+      in_Q: @gateway_config[:input_Q],
+      success_Q: @gateway_config[:success_Q],
+      fail_Q: @gateway_config[:fail_Q]
+    ]
+
+    Logging.debug("Returns:~p", [r])
+    r
+  end
+
+  def send_sms_list(sms_list_to_send, state) do
+    Logging.debug("Called.")
+    results = sms_list_to_send |> Enum.map(&send_sms_to_gw/1)
+    r = {state, results}
+    Logging.debug("Retuens:~p", r)
+    r
+  end
+
+  @spec get_request_headers(%DatabaseEngine.Models.SMS{}, String.t()) ::
+          Utilities.HTTP1_1.headers()
+  defp get_request_headers(sms, service_key) do
     basic_header =
       case @basic_auth do
         nil -> nil
@@ -28,34 +70,18 @@ defmodule GatewayCore.Outputs.IMI do
       end
 
     service_key_header = Utilities.HTTP1_1.header("Servicekey", service_key)
+    identifier_header = Utilities.HTTP1_1.header(@gateway_config[:http_identifier_header], sms.id)
 
     headers =
       case basic_header do
         nil ->
-          [service_key_header]
+          [service_key_header, identifier_header]
 
         _ ->
-          [basic_header, service_key_header]
+          [basic_header, service_key_header, identifier_header]
       end
 
-    {:ok, status_code, _, _} = Utilities.HTTP1_1.wsdl(url, action, headers, body_to_send, timeout)
-
-    if status_code > 199 && status_code < 300 do
-      Logging.info("message_id:~p sent successfully", [sms_to_send.id])
-    else
-      Logging.warn("sms.id:~p sent failed, status_code:~p", [sms_to_send.id, status_code])
-    end
-
-    :ok
-  end
-
-  def gw_init() do
-  end
-
-  def gw_queue_list() do
-  end
-
-  def send_sms_list(_, _) do
+    headers
   end
 
   @spec get_sms_center_base_url() :: String.t()
