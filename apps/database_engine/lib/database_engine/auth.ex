@@ -46,11 +46,15 @@ defmodule DatabaseEngine.Interface.Auth do
       {:atomic, {:not_found, _}} ->
         {:atomic, :ok} =
           :mnesia.transaction(fn ->
-            idx = UUID.uuid4
+            idx = UUID.uuid4()
+            gidx = UUID.uuid4()
+
             pck =
               {AuthUserTb, idx, user.key, user.domain, user |> Map.put(:idx, idx),
                %DatabaseEngine.Struct.TableInternalData{unixtime: Utilities.now()}}
 
+            :mnesia.write({AuthGroupTb, gidx, idx})
+            :mnesia.write({AuthMembershipTb, UUID.uuid4(), idx, gidx})
             :mnesia.write(pck)
           end)
 
@@ -97,9 +101,102 @@ defmodule DatabaseEngine.Interface.Auth do
         [] ->
           {:error, :not_found, :rce9004}
 
-         _ ->
+        _ ->
+          case :mnesia.index_read(AuthGroupTb, idx, :name_idx) do
+            [] ->
+              :pass
+
+            [grp] ->
+              :mnesia.delete({AuthGroupTb, grp |> elem(1)})
+          end
+
+          case :mnesia.index_read(AuthMembershipTb, idx, :user_idx) do
+            [] ->
+              :pass
+
+            [mbsp] ->
+              :mnesia.delete({AuthMembershipTb, mbsp |> elem(1)})
+          end
+
           :mnesia.delete({AuthUserTb, idx})
       end
     end)
+  end
+
+  @spec add_permission(String.t(), String.t()) :: {:atomic, {Atom.t(), Atom.t()}} | {:atomic, :ok}
+  @doc """
+  adds permision to user
+  """
+  def add_permission(user_idx, permission) do
+    :mnesia.transaction(fn ->
+      case :mnesia.index_read(AuthGroupTb, user_idx, :name_idx) do
+        [] ->
+          {:not_found, :rce9005}
+
+        [usergroup] ->
+          case :mnesia.index_read(AuthPermissionTb, usergroup |> elem(1), :group_idx)
+               |> Enum.filter(fn x ->
+                 elem(x, 3) == permission
+               end)
+               |> length do
+            0 ->
+              pck = {AuthPermissionTb, UUID.uuid4(), usergroup |> elem(1), permission}
+              :mnesia.write(pck)
+
+            _ ->
+              :ok
+          end
+      end
+    end)
+  end
+
+  @spec del_permission(String.t(), String.t()) :: {:atomic, {Atom.t(), Atom.t()}} | {:atomic, :ok}
+  @doc """
+  removes permision from user
+  """
+  def del_permission(user_idx, permission) do
+
+
+
+
+    :mnesia.transaction(fn ->
+      case :mnesia.index_read(AuthGroupTb, user_idx, :name_idx) do
+        [] ->
+          {:not_found, :rce9005}
+
+        [usergroup] ->
+          targets = :mnesia.index_read(AuthPermissionTb, usergroup |> elem(1), :group_idx)
+               |> Enum.filter(fn x ->
+                 elem(x, 3) == permission
+               end)
+          case targets |> length do
+            0 ->
+
+              :ok
+            _ ->
+              targets |> Enum.map(fn(x) 
+                :mnesia.delete {AuthMembershipTb, x |> elem(1)}
+              
+              -> end)
+
+          end
+      end
+    end)
+  end
+
+  @spec has_permission(String.t(), String.t()) :: {:atomic, {Atom.t(), Atom.t()}} | {:atomic, :ok}
+  @doc """
+    quiries user permission
+  """
+  def has_permission(user_idx, permission) do
+    :not_implemented
+  end
+
+  @spec get_permissions(String.t()) :: {:atomic, {Atom.t(), Atom.t()}} | {:atomic, Boolean.t()}
+  @doc """
+    Get list of user permissions
+  """
+  def get_permissions(user_idx) do
+    :not_implemented
   end
 end
