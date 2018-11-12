@@ -2,6 +2,7 @@ use Mix.Config
 
 config :gateway_core, Red9Cobra.IMI,
   max_charge_retries: 10,
+  http_identifier_header: System.get_env("IMI_HTTP_ID_HEADER") || "X-RED9COBRA-ID",
   name: "IMI",
   max_charge_amount_per_day_user: 500,
   max_messages_per_sec: 60,
@@ -10,7 +11,10 @@ config :gateway_core, Red9Cobra.IMI,
   membership_message_cron: "* 9 * * 2",
   # sms_center_host: ["172.17.251.18", "172.17.251.19", "172.17.251.20", "172.17.251.21"],
   # client_host: "10.20.197.211",
-
+  # Q Config
+  input_Q: System.get_env("IMI_IN_Q") || "imi_input_q",
+  success_Q: System.get_env("IMI_SUCCESS_Q") || "imi_success_q",
+  fail_Q: System.get_env("IMI_FAIL_Q") || "imi_fail_q",
   # SMS CENTER
   sms_center_host: (System.get_env("IMI_SMS_CENTER_HOSTS") || "imi.red9.ir") |> String.split(","),
   sms_center_port: System.get_env("IMI_SMS_CENTER_PORT") || "443",
