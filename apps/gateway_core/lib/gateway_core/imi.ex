@@ -14,7 +14,8 @@ defmodule GatewayCore.Outputs.IMI do
   @spec send_sms_to_gw(%DatabaseEngine.Models.SMS{}) :: boolean()
   def send_sms_to_gw(
         sms_to_send = %DatabaseEngine.Models.SMS{
-          options: %{:imi_service_key => service_key, :imi_sms_type => sms_type}
+          options: %{:imi_service_key => service_key, :imi_sms_type => sms_type},
+          internal_callback: internal_callback
         }
       ) do
     timeout = get_timeout(sms_type)
@@ -22,8 +23,19 @@ defmodule GatewayCore.Outputs.IMI do
     url = get_call_url(sms_type)
     headers = get_request_headers(sms_to_send, service_key)
 
-    {:ok, status_code, _, _} =
-      Utilities.HTTP1_1.wsdl(url, action, headers, body_to_send, timeout, sms_to_send.id)
+    {:ok, status_code, resp_headers, resp_body} =
+      Networking.HTTP1_1.wsdl(url, action, headers, body_to_send, timeout, sms_to_send.id)
+
+    callback_data = %{
+      :http => %{
+        :headers => resp_headers,
+        :body => resp_body,
+        :status_code => status_code
+      },
+      :success => status_code > 199 and status_code < 300
+    }
+
+    callback(callback_data, internal_callback)
 
     if status_code > 199 && status_code < 300 do
       Logging.info("sms.id:~p sent successfully", [sms_to_send.id])
@@ -56,21 +68,62 @@ defmodule GatewayCore.Outputs.IMI do
     Logging.debug("Called.")
     results = sms_list_to_send |> Enum.map(&send_sms_to_gw/1)
     r = {state, results}
-    Logging.debug("Retuens:~p", r)
+    Logging.debug("Retuens:~p", [r])
     r
   end
 
+  def send_otp_list(otp_list, state) do
+    Logging.debug("Called")
+    results = otp_list |> Enum.map(fn x -> true end)
+    r = {state, results}
+    Logging.debug("Returns:~p", [r])
+    r
+  end
+
+  defp callback(_, nil) do
+    :ok
+  end
+
+  defp callback(
+         data,
+         internal_callback = %DatabaseEngine.Models.InternalCallback{
+           :module_name => module,
+           :function_name => function,
+           :arguments => arguments
+         }
+       ) do
+    try do
+      module =
+        if is_atom(module) == false do
+          String.to_atom(module)
+        end
+
+      function =
+        if is_atom(function) == false do
+          String.to_atom(function)
+        end
+
+      arguments = arguments ++ [data]
+      Kernel.apply(module, function, arguments)
+    rescue
+      e ->
+        Logging.error("problem to call internal_callback:~p error:~p", [internal_callback, e])
+    end
+  end
+
   @spec get_request_headers(%DatabaseEngine.Models.SMS{}, String.t()) ::
-          Utilities.HTTP1_1.headers()
+          Networking.HTTP1_1.headers()
   defp get_request_headers(sms, service_key) do
     basic_header =
       case @basic_auth do
         nil -> nil
-        _ -> Utilities.HTTP1_1.authotization_header(@basic_auth)
+        _ -> Networking.HTTP1_1.authotization_header(@basic_auth)
       end
 
-    service_key_header = Utilities.HTTP1_1.header("Servicekey", service_key)
-    identifier_header = Utilities.HTTP1_1.header(@gateway_config[:http_identifier_header], sms.id)
+    service_key_header = Networking.HTTP1_1.header("Servicekey", service_key)
+
+    identifier_header =
+      Networking.HTTP1_1.header(@gateway_config[:http_identifier_header], sms.id)
 
     headers =
       case basic_header do
@@ -86,8 +139,6 @@ defmodule GatewayCore.Outputs.IMI do
 
   @spec get_sms_center_base_url() :: String.t()
   defp get_sms_center_base_url() do
-    Logging.debug("Called with config: ~p", [@gateway_config])
-
     @gateway_config[:sms_center_request_scheme] <>
       "://" <>
       (@gateway_config[:sms_center_host] |> Enum.random()) <>
