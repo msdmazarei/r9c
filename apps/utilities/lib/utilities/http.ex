@@ -83,9 +83,8 @@ defmodule Utilities.HTTP1_1 do
     http_options =
       if @http_config[:timeout] != nil do
         case List.keyfind(http_options, :timeout, 0) do
-          nil ->
+          v when v in [nil,{:timeout,nil}] ->
             [{:timeout, @http_config[:timeout]} | http_options]
-
           _ ->
             http_options
         end
@@ -114,6 +113,8 @@ defmodule Utilities.HTTP1_1 do
                 @http_log_queue,
                 Utilities.nested_tuple_to_list({:request, id, request})
               )
+              else
+            Logging.warn("NO HTTP Q FOUND!! id:~p",[id])
           end
 
           :httpc.request(method, request, http_options, httpc_options())
@@ -129,7 +130,9 @@ defmodule Utilities.HTTP1_1 do
               DatabaseEngine.DurableQueue.enqueue(
                 @http_log_queue,
                 Utilities.nested_tuple_to_list({:request, id, request})
-              )
+              ) else
+            Logging.warn("NO HTTP Q FOUND!! id:~p",[id])
+
           end
 
           :httpc.request(method, request, http_options, httpc_options())
@@ -204,6 +207,9 @@ defmodule Utilities.HTTP1_1 do
                 v
               ])
           end
+          else
+          Logging.warn("NO HTTP Q FOUND!! id:~p",[id])
+
         end
 
         case reason do
