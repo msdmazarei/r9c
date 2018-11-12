@@ -107,6 +107,8 @@ defmodule Utilities.HTTP1_1 do
           Logging.debug("Call HTTP Target without body. request:~p", [request])
 
           if @http_log_queue != nil do
+            # this will cause to crash if could not enqueue request and
+            # force to restart worker
             :ok =
               DatabaseEngine.DurableQueue.enqueue(
                 @http_log_queue,
@@ -121,6 +123,8 @@ defmodule Utilities.HTTP1_1 do
           Logging.debug("Call HTTP Target with body. request:~p", [request])
 
           if @http_log_queue != nil do
+            # this will cause to crash if could not enqueue request and
+            # force to restart worker
             :ok =
               DatabaseEngine.DurableQueue.enqueue(
                 @http_log_queue,
@@ -165,24 +169,41 @@ defmodule Utilities.HTTP1_1 do
         Logging.debug("Return Res:~p", [result])
 
         if @http_log_queue != nil do
-          :ok =
-            DatabaseEngine.DurableQueue.enqueue(
-              @http_log_queue,
-              Utilities.nested_tuple_to_list({:response, id, result})
-            )
+          case DatabaseEngine.DurableQueue.enqueue(
+                 @http_log_queue,
+                 Utilities.nested_tuple_to_list({:response, id, result})
+               ) do
+            :ok ->
+              :ok
+
+            v ->
+              Logging.warn("could not enqueue http_response for id: ~p , queue response:~p", [
+                id,
+                v
+              ])
+          end
         end
 
         result
 
       {:error, reason} ->
         Logging.debug("There is a problem to HTTP Endpoint, Reason:~p", [reason])
+        Logging.warn("problem in http connection: ~p", [reason])
 
         if @http_log_queue != nil do
-          :ok =
-            DatabaseEngine.DurableQueue.enqueue(
-              @http_log_queue,
-              Utilities.nested_tuple_to_list({:response, id, {:error, reason}})
-            )
+          case DatabaseEngine.DurableQueue.enqueue(
+                 @http_log_queue,
+                 Utilities.nested_tuple_to_list({:response, id, {:error, reason}})
+               ) do
+            :ok ->
+              :ok
+
+            v ->
+              Logging.warn("could not enqueue http_response for id: ~p , queue response:~p", [
+                id,
+                v
+              ])
+          end
         end
 
         case reason do
