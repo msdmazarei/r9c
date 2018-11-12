@@ -27,6 +27,9 @@ end
 
 defimpl DatabaseEngine.DurableQueue.Deserialize,
   for: [Map] do
+  require Logger
+  require Utilities.Logging
+  alias Utilities.Logging
   def deserialize(data) do
     struct_name = String.to_atom(data["__orig_struct__"])
     result = Utilities.to_struct(struct_name, data)
@@ -36,7 +39,21 @@ defimpl DatabaseEngine.DurableQueue.Deserialize,
         correct_options =
           for {key, val} <- result.options, into: %{}, do: {String.to_atom(key), val}
 
-        %DatabaseEngine.Models.SMS{result| options: correct_options}
+        correct_options =
+          case correct_options[:imi_sms_type] do
+            nil ->
+              correct_options
+
+            _ ->
+              Map.put(
+                correct_options,
+                :imi_sms_type,
+                String.to_atom(correct_options[:imi_sms_type])
+              )
+          end
+          Logging.debug("options:~p",[correct_options])
+
+        %DatabaseEngine.Models.SMS{result | options: correct_options}
 
       _ ->
         result

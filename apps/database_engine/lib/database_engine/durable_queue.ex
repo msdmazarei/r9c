@@ -55,10 +55,10 @@ defmodule DatabaseEngine.DurableQueue do
       """
       Called with parameters:
         topic_name: #{topic_name}
-        partition_number: #{partition_number}
+        partition_number: ~p
         object: ~p
       """,
-      [object]
+      [partition_number, object]
     )
 
     case serialize(object) do
@@ -96,7 +96,7 @@ defmodule DatabaseEngine.DurableQueue do
 
     case partitions do
       l when is_list(l) ->
-        Logging.debug("calulated partitions for topic: #{topic_name} are: #{l}")
+        Logging.debug("calulated partitions for topic: #{topic_name} are: ~p",[l])
         enqueue(topic_name, hd(l), object)
 
       [] ->
