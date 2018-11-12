@@ -15,4 +15,9 @@ defmodule DatabaseEngine.Models do
 
 
 
+defmodule DatabaseEngine.Models.VAS.OTP do
+  defstruct contact: nil,
+            service_name: nil,
+            id: nil,
+            options: %{}
 end
