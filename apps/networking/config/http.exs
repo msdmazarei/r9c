@@ -31,6 +31,6 @@ use Mix.Config
 
 use Mix.Config
 
-config :utilities, HTTP,
+config :networking, HTTP,
   timeout: System.get_env("UTILS_HTTP_TIMEOUT") || 100_000,
   log_queue: System.get_env("UTILS_HTTP_QUEUE") || "http_Q"

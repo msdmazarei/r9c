@@ -1,4 +1,4 @@
-defmodule Utilities.HTTP1_1 do
+defmodule Networking.HTTP1_1 do
   @moduledoc ""
   require Logger
   require Utilities.Logging
