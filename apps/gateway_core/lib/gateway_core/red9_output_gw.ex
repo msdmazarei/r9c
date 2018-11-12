@@ -9,7 +9,7 @@ defmodule GatewayCore.Outputs.Red9CobraSimpleOutGW do
   alias KafkaEx.Protocol.Fetch.Message
 
   @callback send_sms_list([DatabaseEngine.Models.SMS], any()) :: {any(), list(boolean())}
-
+  @callback send_otp_list([DatabaseEngine.Models.OTP.VAS], any()) :: {any(), list(boolean())}
   @callback gw_queue_list() :: [in_Q: String.t(), success_Q: String.t(), fail_Q: String.t()]
   @callback gw_init() :: any
 
@@ -55,7 +55,7 @@ defmodule GatewayCore.Outputs.Red9CobraSimpleOutGW do
             message_set,
             state = %State{internal_state: internal_state, success_Q: success_Q, fail_Q: fail_Q}
           ) do
-        sms_list =
+        received_items =
           message_set
           |> Enum.map(fn %Message{value: message} ->
             deserialized_message =
@@ -66,41 +66,21 @@ defmodule GatewayCore.Outputs.Red9CobraSimpleOutGW do
             deserialized_message
           end)
 
+        sms_list =
+          received_items
+          |> Enum.filter(fn x -> is_map(x) and x.__struct__ == DatabaseEngine.Models.SMS end)
+
+        otp_list =
+          received_items
+          |> Enum.filter(fn x -> is_map(x) and x.__struct__ == DatabaseEngine.Models.OTP.VAS end)
+
         {new_internal_state, sending_result} = send_sms_list(sms_list, internal_state)
+        {new_internal_state, otp_send_result} = send_otp_list(otp_list, internal_state)
+
         Logging.debug("internal_state:~p sms_result:~p", [internal_state, sending_result])
-
-        for i <- 1..length(sending_result) do
-          sms_ = :lists.nth(i, sms_list)
-
-          if :lists.nth(i, sending_result) == true do
-            if success_Q != nil do
-              case DatabaseEngine.DurableQueue.enqueue(success_Q, sms_) do
-                :nok ->
-                  Logging.warn("Could not enqueue sms.id:~p into success_Q:~p", [
-                    sms_.id,
-                    success_Q
-                  ])
-
-                _ ->
-                  :ok
-              end
-            else
-              Logging.debug("No Success Q Defined, to push successful sms", [])
-            end
-          else
-            if fail_Q != nil do
-              case DatabaseEngine.DurableQueue.enqueue(fail_Q, sms_) do
-                :nok ->
-                  Logging.warn("Could not enqueue sms.id;~p into fail_Q:~p", [sms_.id, fail_Q])
-
-                _ ->
-                  :ok
-              end
-            else
-              Logging.debug("No Fail Q Defined. to push failuar sms", [])
-            end
-          end
-        end
+        enqueue_items(sms_list, sending_result, state)
+        Logging.debug("internal_state:~p otp_result:~p", [internal_state, otp_send_result])
+        enqueue_items(otp_list, otp_send_result, state)
 
         {
           :async_commit,
@@ -163,10 +143,52 @@ defmodule GatewayCore.Outputs.Red9CobraSimpleOutGW do
         end
       end
 
-      def send_sms(sms) do
+      def send(sms) do
         queues = gw_queue_list()
         in_Q = queues[:in_Q]
         DatabaseEngine.DurableQueue.enqueue(in_Q, sms)
+      end
+
+      defp enqueue_items([], _, _) do
+      end
+
+      defp enqueue_items(
+             items,
+             send_results,
+             state = %State{internal_state: internal_state, success_Q: success_Q, fail_Q: fail_Q}
+           ) do
+        for i <- 1..length(items) do
+          item = :lists.nth(i, items)
+
+          if :lists.nth(i, send_results) == true do
+            if success_Q != nil do
+              case DatabaseEngine.DurableQueue.enqueue(success_Q, item) do
+                :nok ->
+                  Logging.warn("Could not enqueue id:~p into success_Q:~p", [
+                    item.id,
+                    success_Q
+                  ])
+
+                _ ->
+                  :ok
+              end
+            else
+              Logging.debug("No Success Q Defined, to push successful sms", [])
+            end
+          else
+            if fail_Q != nil do
+              case DatabaseEngine.DurableQueue.enqueue(fail_Q, item) do
+                :nok ->
+                  Logging.warn("Could not enqueue sms.id;~p into fail_Q:~p", [item.id, fail_Q])
+
+                _ ->
+                  :ok
+              end
+            else
+              Logging.debug("No Fail Q Defined. to push failuar sms", [])
+            end
+          end
+        end
       end
     end
   end
