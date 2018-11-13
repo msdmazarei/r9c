@@ -174,10 +174,10 @@ defmodule DatabaseEngine.Interface.Auth do
 
               :ok
             _ ->
-              targets |> Enum.map(fn(x) 
+              targets |> Enum.map(fn(x) ->
                 :mnesia.delete {AuthMembershipTb, x |> elem(1)}
               
-              -> end)
+              end)
 
           end
       end
