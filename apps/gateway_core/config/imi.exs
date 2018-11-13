@@ -22,6 +22,15 @@ config :gateway_core, Red9Cobra.IMI,
 
   # Basic cmVkOTpBODg5OWdoanRyZQ==
   sms_center_auth: System.get_env("IMI_SMS_CENTER_AUTH") || "Basic cmVkOTpBODg5OWdoanRyZQ==",
+
+  # OTP
+  otp_center_host: (System.get_env("IMI_OTP_CENTER_HOSTS") || "imi.red9.ir") |> String.split(","),
+  otp_center_port: System.get_env("IMI_OTP_CENTER_PORT") || "443",
+  otp_center_request_scheme: System.get_env("IMI_OTP_CENTER_SCHEME") || "https",
+  otp_pushotp_url: System.get_env("IMI_OTP_CENTER_BASE_URL") || "/apigw/charging/pushotp",
+  # Basic cmVkOTpBODg5OWdoanRyZQ==
+  otp_center_auth: System.get_env("IMI_OTP_CENTER_AUTH") || "Basic cmVkOTpBODg5OWdoanRyZQ==",
+
   # FTP TOOL
   ftp_endpoint: System.get_env("IMI_FTP_ENDPOINT"),
 
