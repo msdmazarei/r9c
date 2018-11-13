@@ -28,6 +28,8 @@ config :gateway_core, Red9Cobra.IMI,
   otp_center_port: System.get_env("IMI_OTP_CENTER_PORT") || "443",
   otp_center_request_scheme: System.get_env("IMI_OTP_CENTER_SCHEME") || "https",
   otp_pushotp_url: System.get_env("IMI_OTP_CENTER_BASE_URL") || "/apigw/charging/pushotp",
+  otp_chargeotp_url: System.get_env("IMI_OTP_CENTER_BASE_URL") || "/apigw/charging/chargeotp",
+
   # Basic cmVkOTpBODg5OWdoanRyZQ==
   otp_center_auth: System.get_env("IMI_OTP_CENTER_AUTH") || "Basic cmVkOTpBODg5OWdoanRyZQ==",
 

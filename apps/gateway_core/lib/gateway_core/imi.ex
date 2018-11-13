@@ -4,121 +4,13 @@ defmodule GatewayCore.Outputs.IMI do
   require Logger
   require Utilities.Logging
   alias Utilities.Logging
+  require Utilities
 
   use GatewayCore.Outputs.Red9CobraSimpleOutGW
   # require IEx
   @gateway_config Application.get_env(:gateway_core, Red9Cobra.IMI)
   @wsdl_action_endpoint @gateway_config[:wsdl_action_endpoint]
   @basic_auth @gateway_config[:sms_center_auth]
-  @otp_basic_auth @gateway_config[:otp_center_auth]
-  @compile {:inline, get_pushotp_url: 0}
-
-  @spec otp_push_req_to_gw(%DatabaseEngine.Models.OTP.VAS{}) :: boolean
-  def otp_push_req_to_gw(
-        vas_otp = %DatabaseEngine.Models.OTP.VAS{
-          :gw_option => %DatabaseEngine.Models.OTP.VAS.IMI_GW_OPTS{},
-          :options => %{:max_daily_allowed_charge => max_daily_allowed_charge},
-          :internal_callback => internal_callback
-        }
-      ) do
-    Logging.debug("Called. Params:~p", [vas_otp])
-    sk = vas_otp.gw_option.service_key
-    sn = vas_otp.gw_option.service_name_fa || vas_otp.service_name
-    sc = vas_otp.gw_option.subscriber_code
-    short_code = vas_otp.gw_option.short_code
-
-    data = %{
-      "accesInfo" => %{
-        "servicekey" => sk,
-        "msisdn" => vas_otp.contact,
-        "serviceName" => sn,
-        "referenceCode" => vas_otp.id,
-        "shortCode" => short_code,
-        "contentId" => "RED9-S-#{vas_otp.id}"
-      },
-      "charge" => %{
-        "code" => sc,
-        "amount" => (max_daily_allowed_charge |> to_string |> String.to_integer()) * 10,
-        "description" => "DESC: Subscription to #{sn} service"
-      }
-    }
-
-    Logging.debug("Data to Send To Server:~p", [data])
-    url = get_pushotp_url()
-    Logging.debug("Url to Call:~p", [url])
-
-    headers =
-      if @otp_basic_auth != nil do
-        Networking.HTTP1_1.authotization_header(@otp_basic_auth)
-      else
-        []
-      end
-
-    {:ok, status_code, resp_headers, resp_body} =
-      Networking.HTTP1_1.post(
-        url,
-        headers,
-        "application/json",
-        data |> Jason.encode(),
-        nil,
-        vas_otp.id
-      )
-
-    callback_data_http = %{
-      :http => %{
-        :status_code => status_code,
-        :headers => resp_headers,
-        :body => resp_body
-      }
-    }
-
-    callback_data =
-      case status_code do
-        200 ->
-          {:ok, responseJson} = resp_body |> Jason.decode()
-
-          case responseJson["statusInfo"]["statusCode"] do
-            "500" ->
-              Logging.warn("OTP PUSH id:~p failed.", [vas_otp.id])
-
-              Map.merge(
-                %{
-                  :success => false,
-                  :error => responseJson["statusInfo"]["errorInfo"]
-                },
-                callback_data_http
-              )
-
-            _ ->
-              Logging.info("OTP PUSH id:~p done.", [vas_otp.id])
-
-              Map.merge(callback_data_http, %{
-                :success => true,
-                :info => responseJson["statusInfo"]
-              })
-          end
-
-        _ ->
-          Logging.warn("OTP PUSH id:~p failed. status code:~p", [vas_otp.id, status_code])
-
-          %{
-            :http => %{
-              :status_code => status_code,
-              :headers => resp_headers,
-              :body => resp_body
-            },
-            :success => false
-          }
-      end
-
-    callback(callback_data, internal_callback)
-    callback_data[:success]
-  end
-
-  def otp_push_req_to_gw(vas_otp) do
-    Logging.error("Bad method call no gw_options found. vas_otp:~p", [vas_otp])
-    false
-  end
 
   @spec send_sms_to_gw(%DatabaseEngine.Models.SMS{}) :: boolean()
   def send_sms_to_gw(
@@ -195,38 +87,13 @@ defmodule GatewayCore.Outputs.IMI do
 
   defp callback(
          data,
-         internal_callback = %DatabaseEngine.Models.InternalCallback{
+         %DatabaseEngine.Models.InternalCallback{
            :module_name => module,
            :function_name => function,
            :arguments => arguments
          }
        ) do
-    try do
-      module =
-        if is_atom(module) == false do
-          String.to_atom(module)
-        end
-
-      function =
-        if is_atom(function) == false do
-          String.to_atom(function)
-        end
-
-      arguments = arguments ++ [data]
-      Kernel.apply(module, function, arguments)
-    rescue
-      e ->
-        Logging.error("problem to call internal_callback:~p error:~p", [internal_callback, e])
-    end
-  end
-
-  @spec get_pushotp_url() :: String.t()
-  defp get_pushotp_url() do
-    @gateway_config[:otp_center_request_scheme] <>
-      "://" <>
-      (@gateway_config[:otp_center_host]
-       |> Enum.random()) <>
-      ":" <> @gateway_config[:otp_center_port] <> @gateway_config[:otp_pushotp_url]
+    Utilities.callback(data, module, function, arguments)
   end
 
   @spec get_request_headers(%DatabaseEngine.Models.SMS{}, String.t()) ::
@@ -304,7 +171,7 @@ defmodule GatewayCore.Outputs.IMI do
     Logging.debug("Called", [])
     send_sms_config = @gateway_config[:methods][sms_type]
     template = send_sms_config[:template]
-    action = (@wsdl_action_endpoint || "") <> (send_sms_config[:action] || "")
+    action = @wsdl_action_endpoint <> send_sms_config[:action]
 
     delivery_endpoint = get_delivery_base_url()
 

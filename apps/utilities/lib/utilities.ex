@@ -84,4 +84,35 @@ defmodule Utilities do
       end
     end)
   end
+
+  @spec callback(any(), String.t(), String.t(), list(any())) :: any()
+  def callback(
+        data,
+        module,
+        function,
+        arguments \\ []
+      ) do
+    try do
+      module =
+        if is_atom(module) == false do
+          String.to_atom(module)
+        end
+
+      function =
+        if is_atom(function) == false do
+          String.to_atom(function)
+        end
+
+      arguments = arguments ++ [data]
+      Kernel.apply(module, function, arguments)
+    rescue
+      e ->
+        Logging.error("problem to call module:~p function:~p args:~p error:~p", [
+          module,
+          function,
+          arguments,
+          e
+        ])
+    end
+  end
 end
