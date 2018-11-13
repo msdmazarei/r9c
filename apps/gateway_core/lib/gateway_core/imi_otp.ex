@@ -187,6 +187,10 @@ defmodule GatewayCore.Outputs.IMI.OTP do
        |> Enum.random()) <> ":" <> @gateway_config[:otp_center_port] <> @gateway_config[type]
   end
 
+  defp callback(_, nil) do
+    :ok
+  end
+
   defp callback(
          data,
          %DatabaseEngine.Models.InternalCallback{

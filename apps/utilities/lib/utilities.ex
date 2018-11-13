@@ -2,6 +2,9 @@ defmodule Utilities do
   @moduledoc """
   Documentation for Utilities.
   """
+  require Logger
+  require Utilities.Logging
+  alias Utilities.Logging
 
   @doc """
   Hello world.
@@ -37,7 +40,7 @@ defmodule Utilities do
   def randnode do
     ## later, this needs to be fixed and cached.
     randseed()
-    allnodes |> Enum.shuffle() |> hd
+    allnodes() |> Enum.shuffle() |> hd
   end
 
   @doc """
