@@ -38,7 +38,7 @@ defmodule GatewayCore.Outputs.IMI do
 
   def send_otp_list(otp_list, state) do
     Logging.debug("Called")
-    results = otp_list |> Enum.map(fn x -> true end)
+    results = otp_list |> Enum.map(&GatewayCore.Outputs.IMI.OTP.otp_req_to_gw/1)
     r = {state, results}
     Logging.debug("Returns:~p", [r])
     r

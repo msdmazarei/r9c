@@ -17,13 +17,16 @@ defmodule GatewayCore.Outputs.IMI.OTP do
   def otp_req_to_gw(
         vas_otp = %DatabaseEngine.Models.OTP.VAS{
           :gw_option => %DatabaseEngine.Models.OTP.VAS.IMI_GW_OPTS{},
-          :options => %{"max_daily_allowed_charge" => max_daily_allowed_charge},
+          :options => %{
+            "max_daily_allowed_charge" => max_daily_allowed_charge,
+            "service_name_fa" => service_name_fa
+          },
           :otp_type => "push"
         }
       ) do
     Logging.debug("Called. Params:~p", [vas_otp])
     sk = vas_otp.gw_option.service_key
-    sn = vas_otp.gw_option.service_name_fa || vas_otp.service_name
+    sn = service_name_fa || vas_otp.service_name
     sc = vas_otp.gw_option.subscriber_code
     short_code = vas_otp.gw_option.short_code
 
@@ -38,7 +41,7 @@ defmodule GatewayCore.Outputs.IMI.OTP do
       },
       "charge" => %{
         "code" => sc,
-        "amount" => (max_daily_allowed_charge |> to_string |> String.to_integer()) * 10,
+        "amount" => max_daily_allowed_charge |> to_string |> String.to_integer(),
         "description" => "DESC: Subscription to #{sn} service"
       }
     }
@@ -57,9 +60,10 @@ defmodule GatewayCore.Outputs.IMI.OTP do
             "reference_code" => reference_code,
             "pin" => pin
           },
-          :otp_type => "confirm"
+          :otp_type => otp_type
         }
-      ) do
+      )
+      when otp_type in ["confirm", "charge_confirm"] do
     sk = vas_otp.gw_option.service_key
     short_code = vas_otp.gw_option.short_code
 
@@ -77,6 +81,50 @@ defmodule GatewayCore.Outputs.IMI.OTP do
     Logging.debug("Data to send to server:~p", [data])
     url = get_otp_url(:otp_chargeotp_url)
     Logging.debug("Url to Call:~p", [url])
+    process_otp_api(vas_otp, url, data)
+  end
+
+  def otp_req_to_gw(
+        vas_otp = %DatabaseEngine.Models.OTP.VAS{
+          :gw_option => %DatabaseEngine.Models.OTP.VAS.IMI_GW_OPTS{
+            :service_key => sk,
+            :short_code => short_code
+          },
+          :service_name => service_name,
+          :options => %{
+            "service_name_fa" => service_name_fa,
+            "reference_code" => reference_code,
+            "charge_code" => charge_code,
+            "charge_amount" => charge_amount,
+            "reason_for_charge" => reason_for_charge
+          },
+          :otp_type => "charge",
+          :contact => msisdn,
+          :id => id
+        }
+      ) do
+    sn = service_name_fa || service_name
+    short_code = short_code |> to_string
+
+    data = %{
+      "accesInfo" => %{
+        "servicekey" => sk,
+        "msisdn" => msisdn,
+        "serviceName" => sn,
+        "referenceCode" => reference_code,
+        "shortCode" => short_code,
+        "contentId" => "RED9-C#{id}"
+      },
+      "charge" => %{
+        "code" => charge_code,
+        "amount" => charge_amount,
+        "description" => "DESC: #{reason_for_charge}"
+      }
+    }
+
+    Logging.debug("Data to send: ~p for id:~p", [data, id])
+    url = get_otp_url(:otp_pushotp_url)
+    Logging.debug("Url: ~p for id:~p", [url, id])
     process_otp_api(vas_otp, url, data)
   end
 
@@ -126,6 +174,15 @@ defmodule GatewayCore.Outputs.IMI.OTP do
 
                 %{:success => false, :error => responseJson["statusInfo"]["errorInfo"]}
             end
+
+          "charge" ->
+            case responseJson["statusInfo"]["statusCode"] do
+              "200" ->
+                %{:success => true, :info => responseJson["statusInfo"]}
+
+              _ ->
+                %{:success => false, :error => responseJson["statusInfo"]["errorInfo"]}
+            end
         end
 
       _ ->
@@ -150,17 +207,19 @@ defmodule GatewayCore.Outputs.IMI.OTP do
        ) do
     headers =
       if @otp_basic_auth != nil do
-        Networking.HTTP1_1.authotization_header(@otp_basic_auth)
+        [Networking.HTTP1_1.authotization_header(@otp_basic_auth)]
       else
         []
       end
+
+    {:ok, data_str} = data |> Jason.encode()
 
     {:ok, status_code, resp_headers, resp_body} =
       Networking.HTTP1_1.post(
         url,
         headers,
         "application/json",
-        data |> Jason.encode(),
+        data_str,
         nil,
         vas_otp.id
       )
@@ -175,6 +234,7 @@ defmodule GatewayCore.Outputs.IMI.OTP do
 
     callback_data_api_response = process_otp_api_response(vas_otp, status_code, resp_body)
     callback_data = Map.merge(callback_data_http, callback_data_api_response)
+    Logging.debug("callback_data:~p", [callback_data])
     callback(callback_data, internal_callback)
     callback_data[:success]
   end
