@@ -1,11 +1,11 @@
-defmodule GatewayCore.Outputs.IMI do
+defmodule GatewayCore.Outputs.IrMtn do
   @moduledoc false
 
   require Logger
   require Utilities.Logging
   alias Utilities.Logging
   require Utilities
-  @gateway_config Application.get_env(:gateway_core, Red9Cobra.IMI)
+  @gateway_config Application.get_env(:gateway_core, Red9Cobra.IRMTN)
 
   use GatewayCore.Outputs.Red9CobraSimpleOutGW
   # require IEx
@@ -30,7 +30,7 @@ defmodule GatewayCore.Outputs.IMI do
 
   def send_sms_list(sms_list_to_send, state) do
     Logging.debug("Called.")
-    results = sms_list_to_send |> Enum.map(&GatewayCore.Outputs.IMI.SMS.send_sms_to_gw/1)
+    results = sms_list_to_send |> Enum.map(&GatewayCore.Outputs.IRMTN.SMS.send_sms_to_gw/1)
     r = {state, results}
     Logging.debug("Retuens:~p", [r])
     r
@@ -38,17 +38,17 @@ defmodule GatewayCore.Outputs.IMI do
 
   def send_otp_list(otp_list, state) do
     Logging.debug("Called")
-    results = otp_list |> Enum.map(&GatewayCore.Outputs.IMI.OTP.otp_req_to_gw/1)
-    r = {state, results}
+    Logging.error("NO OTP METHOD DEFINED FOR ~p MODULE, BUT SOMEONE ARE SENDING OTP !!! OTP LIST:~p",[__MODULE__,otp_list])
+    r = {state, otp_list|> Enum.map(fn _ -> false end)}
     Logging.debug("Returns:~p", [r])
     r
   end
 
   def send_charge_list(charge_list, state) do
     Logging.debug("Called")
-    Logging.error("NO CHARGE METHOD DEFINED FOR ~p MODULE, BUT SOMEONE ARE SENDING CHARGE !!! CHARGE LIST:~p",[__MODULE__,charge_list])
-    r = {state, charge_list|> Enum.map(fn _ -> false end)}
-    Logging.debug("Returns:~p", [r])
+    results = charge_list |> Enum.map(&GatewayCore.Outputs.IRMTN.Charge.charge/1)
+    r = {state, results}
+    Logging.debug("Retuens:~p", [r])
     r
   end
 

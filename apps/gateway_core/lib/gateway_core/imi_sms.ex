@@ -10,7 +10,6 @@ defmodule GatewayCore.Outputs.IMI.SMS do
   @wsdl_action_endpoint @gateway_config[:wsdl_action_endpoint]
   @basic_auth @gateway_config[:sms_center_auth]
 
-  @compile {:inline, callback: 2}
   @compile {:inline, get_delivery_base_url: 0}
   @compile {:inline, get_sms_center_base_url: 0}
 
@@ -38,7 +37,7 @@ defmodule GatewayCore.Outputs.IMI.SMS do
       :success => status_code > 199 and status_code < 300
     }
 
-    callback(callback_data, internal_callback)
+    GatewayCore.Utils.callback(callback_data, internal_callback)
 
     if status_code > 199 && status_code < 300 do
       Logging.info("sms.id:~p sent successfully", [sms_to_send.id])
@@ -47,21 +46,6 @@ defmodule GatewayCore.Outputs.IMI.SMS do
       Logging.warn("sms.id:~p sent failed, status_code:~p", [sms_to_send.id, status_code])
       false
     end
-  end
-
-  defp callback(_, nil) do
-    :ok
-  end
-
-  defp callback(
-         data,
-         %DatabaseEngine.Models.InternalCallback{
-           :module_name => module,
-           :function_name => function,
-           :arguments => arguments
-         }
-       ) do
-    Utilities.callback(data, module, function, arguments)
   end
 
   @spec get_request_headers(%DatabaseEngine.Models.SMS{}, String.t()) ::
