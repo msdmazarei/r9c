@@ -141,6 +141,8 @@ defmodule DatabaseEngine.Interface.Auth do
                |> length do
             0 ->
               pck = {AuthPermissionTb, UUID.uuid4(), usergroup |> elem(1), permission}
+
+
               :mnesia.write(pck)
 
             _ ->
@@ -155,30 +157,27 @@ defmodule DatabaseEngine.Interface.Auth do
   removes permision from user
   """
   def del_permission(user_idx, permission) do
-
-
-
-
     :mnesia.transaction(fn ->
       case :mnesia.index_read(AuthGroupTb, user_idx, :name_idx) do
         [] ->
           {:not_found, :rce9005}
 
         [usergroup] ->
-          targets = :mnesia.index_read(AuthPermissionTb, usergroup |> elem(1), :group_idx)
-               |> Enum.filter(fn x ->
-                 elem(x, 3) == permission
-               end)
+          targets =
+            :mnesia.index_read(AuthPermissionTb, usergroup |> elem(1), :group_idx)
+            |> Enum.filter(fn x ->
+              elem(x, 3) == permission
+            end)
+
           case targets |> length do
             0 ->
-
               :ok
-            _ ->
-              targets |> Enum.map(fn(x) ->
-                :mnesia.delete {AuthMembershipTb, x |> elem(1)}
-              
-              end)
 
+            _ ->
+              targets
+              |> Enum.map(fn x ->
+                :mnesia.delete({AuthMembershipTb, x |> elem(1)})
+              end)
           end
       end
     end)

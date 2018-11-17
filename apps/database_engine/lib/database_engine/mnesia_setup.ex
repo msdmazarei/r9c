@@ -78,30 +78,11 @@ defmodule DatabaseEngine.Mnesia.DbSetup do
     start_every_mnesia(nodes)
   end
 
-  @spec create_test_table(list(Atom.t())) :: :ok
-  def create_test_table(nodes) do
-    case :mnesia.create_table(TestTable, [
-           {:disc_copies, nodes},
-           majority: true,
-           attributes: [:data1, :data2, :data3, :data4],
-           index: [:data3]
-         ]) do
-      {:atomic, :ok} ->
-        Logger.info(fn -> "test table created" end)
-
-      {:aborted, {:already_exists, TestTable}} ->
-        Logger.debug(fn -> "test table is available." end)
-    end
-
-    :ok
-  end
-
   @spec insert_test_record() :: {:atomic, :ok}
   def insert_test_record do
     idx = UUID.uuid4()
-    data2 = :hasan
-    data4 = :rahim
-    data3 = :gholi
+    key = :hasan
+    value = :rahim
 
     pck = {TestTable, idx, data2, data3, data4}
 
