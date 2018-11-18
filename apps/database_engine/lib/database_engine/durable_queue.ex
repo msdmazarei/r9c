@@ -1,3 +1,7 @@
+defprotocol DatabaseEngine.DurableQueue.Deserialize do
+  def deserialize(data)
+end
+
 defmodule DatabaseEngine.DurableQueue do
   @moduledoc false
 
@@ -30,7 +34,14 @@ defmodule DatabaseEngine.DurableQueue do
     case Serializer.deserialize(string) do
       {:ok, obj} ->
         Logging.debug("Deserialized Successfully, Returns: ~p", [obj])
-        obj
+
+        case obj["__orig_struct__"] do
+          nil ->
+            obj
+
+          _ ->
+            DatabaseEngine.DurableQueue.Deserialize.deserialize(obj)
+        end
 
       v ->
         Logging.debug("Deserializer Faild, Returned: ~p", [v])
@@ -44,10 +55,13 @@ defmodule DatabaseEngine.DurableQueue do
       """
       Called with parameters:
         topic_name: #{topic_name}
-        partition_number: #{partition_number}
+        partition_number: ~p
         object: ~p
       """,
-      [object]
+      [partition_number, object]
+
+
+
     )
 
     case serialize(object) do
@@ -85,7 +99,7 @@ defmodule DatabaseEngine.DurableQueue do
 
     case partitions do
       l when is_list(l) ->
-        Logging.debug("calulated partitions for topic: #{topic_name} are: #{l}")
+        Logging.debug("calulated partitions for topic: #{topic_name} are: ~p", [l])
         enqueue(topic_name, hd(l), object)
 
       [] ->
@@ -134,5 +148,12 @@ defmodule DatabaseEngine.DurableQueue do
 
     Logging.debug("Returns: ~p", [r])
     r
+  end
+
+  def stop_consumer_group(pid) do
+    DynamicSupervisor.terminate_child(
+      DatabaseEngine.DurableQueue.ConsumerGroupWorkers.Supervisor,
+      pid
+    )
   end
 end

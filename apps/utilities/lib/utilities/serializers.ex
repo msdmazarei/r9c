@@ -20,7 +20,7 @@ defmodule Utilities.Serializers.JSONSerializer do
     Jason.encode(object)
   end
 
-  @spec deserialize(string()) :: {:ok, term} | {:error, Exception.t()}
+  @spec deserialize(String.t()) :: {:ok, term} | {:error, Exception.t()}
   def deserialize(json_string) do
     Jason.decode(json_string)
   end

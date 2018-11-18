@@ -48,8 +48,8 @@ config :kafka_ex,
   # In the case below you would set "advertised.host.name=localhost"
   brokers: [
     {"s1.kafka.local", 9092},
-    {"s1.kafka.local", 9092},
-    {"s1.kafka.local", 9092}
+    {"s2.kafka.local", 9092},
+    {"s3.kafka.local", 9092}
   ],
   #
   # OR:

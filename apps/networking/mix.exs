@@ -1,9 +1,9 @@
-defmodule GatewayCore.MixProject do
+defmodule Networking.MixProject do
   use Mix.Project
 
   def project do
     [
-      app: :gateway_core,
+      app: :networking,
       version: "0.1.0",
       build_path: "../../_build",
       config_path: "../../config/config.exs",
@@ -18,8 +18,7 @@ defmodule GatewayCore.MixProject do
   # Run "mix help compile.app" to learn about applications.
   def application do
     [
-      extra_applications: [:logger],
-      mod: {GatewayCore.Application, []}
+      extra_applications: [:logger]
     ]
   end
 
@@ -27,14 +26,10 @@ defmodule GatewayCore.MixProject do
   defp deps do
     [
       {:utilities, in_umbrella: true},
-      {:database_engine, in_umbrella: true},
-      {:networking, in_umbrella: true},
-      {:exml, "~>0.1.0"},
-
+      {:database_engine, in_umbrella: true}
       # {:dep_from_hexpm, "~> 0.3.0"},
       # {:dep_from_git, git: "https://github.com/elixir-lang/my_dep.git", tag: "0.1.0"},
       # {:sibling_app_in_umbrella, in_umbrella: true},
-      {:erl_gsm, github: "msdmazarei/erl_gsm"}
     ]
   end
 end

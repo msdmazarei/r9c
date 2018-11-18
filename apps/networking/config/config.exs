@@ -10,11 +10,11 @@ use Mix.Config
 
 # You can configure your application as:
 #
-#     config :gateway_core, key: :value
+#     config :networking, key: :value
 #
 # and access this configuration in your application as:
 #
-#     Application.get_env(:gateway_core, :key)
+#     Application.get_env(:networking, :key)
 #
 # You can also configure a 3rd-party app:
 #
@@ -28,13 +28,4 @@ use Mix.Config
 # here (which is why it is important to import them last).
 #
 #     import_config "#{Mix.env()}.exs"
-import_config "imi.exs"
-import_config "irmtn.exs"
-import_config "dummy.exs"
-
-config :gateway_core,
-  gsm_gateway: [
-    q_in: "gsm_input",
-    q_out: "gsm_output"
-  ],
-  modems: [{"127.0.0.1", 3285}]
+import_config "http.exs"
