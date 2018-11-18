@@ -51,6 +51,13 @@ defmodule Utilities do
     Node.list() ++ [node()]
   end
 
+  @doc """
+  gets unixtime
+  """
+  def now do
+    DateTime.utc_now() |> DateTime.to_unix(:millisecond)
+  end
+
   def to_erl_list(x) do
     if is_binary(x) do
       :binary.bin_to_list(x)

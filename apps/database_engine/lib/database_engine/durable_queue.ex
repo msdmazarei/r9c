@@ -59,9 +59,6 @@ defmodule DatabaseEngine.DurableQueue do
         object: ~p
       """,
       [partition_number, object]
-
-
-
     )
 
     case serialize(object) do
