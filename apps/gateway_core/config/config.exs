@@ -30,6 +30,7 @@ use Mix.Config
 #     import_config "#{Mix.env()}.exs"
 import_config "imi.exs"
 import_config "irmtn.exs"
+import_config "dummy.exs"
 
 config :gateway_core,
   gsm_gateway: [

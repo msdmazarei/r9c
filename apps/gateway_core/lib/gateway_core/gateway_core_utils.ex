@@ -23,15 +23,13 @@ defmodule GatewayCore.Utils.VAS.GW do
   @compile {:inline, get_sms_center_base_url: 1}
   @compile {:inline, get_call_url: 2}
 
-  def template(gateway_config,type) do
-      gateway_config[:methods][type][:template]
-
+  def template(gateway_config, type) do
+    gateway_config[:methods][type][:template]
   end
-  def action(gateway_config,type) do
+
+  def action(gateway_config, type) do
     gateway_config[:wsdl_action_endpoint] <> gateway_config[:methods][type][:action]
   end
-
-
 
   def get_sms_center_base_url(gateway_config) do
     gateway_config[:sms_center_request_scheme] <>

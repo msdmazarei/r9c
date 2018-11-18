@@ -5,5 +5,5 @@ config :gateway_core, Red9Cobra.DUMMY,
   input_Q: System.get_env("DUMMY_IN_Q") || "dummy_input_q",
   success_Q: System.get_env("DUMMY_SUCCESS_Q") || "dummy_success_q",
   fail_Q: System.get_env("DUMMY_FAIL_Q") || "dummy_fail_q",
-  crash_probeblity: System.get_env("DUMMY_CRASH_PROBEBLITY") || 0.1,
+  crash_probeblity: System.get_env("DUMMY_CRASH_PROBEBLITY") || 0.6,
   send_failur_probeblity: System.get_env("DUMMY_SEND_PROBEBLITY") || 0.1

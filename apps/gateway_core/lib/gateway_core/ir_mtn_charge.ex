@@ -12,8 +12,39 @@ defmodule GatewayCore.Outputs.IRMTN.Charge do
   @error_codes @gateway_config[:error_codes]
   #  @default_max_daily_charge_sum @gateway_config[:max_user_charge_per_day]
   #  @default_max_daily_charge_retry_count @gateway_config[:max_user_charge_retry_count]
-#  @wsdl_action_endpoint @gateway_config[:wsdl_action_endpoint]
+  #  @wsdl_action_endpoint @gateway_config[:wsdl_action_endpoint]
   @basic_auth @gateway_config[:sms_center_auth]
+
+  def build_charge(
+        id,
+        contact,
+        service_name,
+        service_id,
+        charge_amount,
+        spid,
+        module_name \\ nil,
+        function_name \\ nil,
+        arguments \\ nil
+      ) do
+    %DatabaseEngine.Models.Charge.VAS{
+      contact: contact,
+      service_name: service_name,
+      service_id: service_id,
+      options: %{"spid" => spid},
+      internal_callback:
+        if module_name do
+          %DatabaseEngine.Models.InternalCallback{
+            module_name: module_name,
+            function_name: function_name,
+            arguments: arguments
+          }
+        else
+          nil
+        end,
+      id: id,
+      charge_amount: charge_amount
+    }
+  end
 
   def charge(
         charge_request = %DatabaseEngine.Models.Charge.VAS{
@@ -69,9 +100,9 @@ defmodule GatewayCore.Outputs.IRMTN.Charge do
          id: id,
          contact: contact,
          charge_amount: charge_amount,
-         options: %{spid: spid}
+         options: %{"spid" => spid}
        }) do
-    template = @gateway_config|> GWConf.template(:charge)
+    template = @gateway_config |> GWConf.template(:charge)
     action = @gateway_config |> GWConf.action(:charge)
 
     {:ok,

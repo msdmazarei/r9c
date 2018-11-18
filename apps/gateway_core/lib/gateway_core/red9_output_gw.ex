@@ -7,7 +7,9 @@ defmodule GatewayCore.Outputs.Red9CobraSimpleOutGW do
   alias Utilities.Logging
   alias DatabaseEngine.DurableQueue
   alias KafkaEx.Protocol.Fetch.Message
-  @callback send_charge_list([DatabaseEnginge.Models.Charge.VAS],any()) :: {any(),list(boolean())}
+
+  @callback send_charge_list([DatabaseEnginge.Models.Charge.VAS], any()) ::
+              {any(), list(boolean())}
   @callback send_sms_list([DatabaseEngine.Models.SMS], any()) :: {any(), list(boolean())}
   @callback send_otp_list([DatabaseEngine.Models.OTP.VAS], any()) :: {any(), list(boolean())}
   @callback gw_queue_list() :: [in_Q: String.t(), success_Q: String.t(), fail_Q: String.t()]
@@ -76,11 +78,13 @@ defmodule GatewayCore.Outputs.Red9CobraSimpleOutGW do
 
         charge_list =
           received_items
-          |> Enum.filter(fn x -> is_map(x) and x.__struct__ == DatabaseEngine.Models.Charge.VAS end)
+          |> Enum.filter(fn x ->
+            is_map(x) and x.__struct__ == DatabaseEngine.Models.Charge.VAS
+          end)
 
         {new_internal_state, sending_result} = send_sms_list(sms_list, internal_state)
         {new_internal_state, otp_send_result} = send_otp_list(otp_list, internal_state)
-        {new_internal_state, charge_send_result} = send_charge_list(charge_list,internal_state)
+        {new_internal_state, charge_send_result} = send_charge_list(charge_list, internal_state)
 
         Logging.debug("internal_state:~p sms_result:~p", [internal_state, sending_result])
         enqueue_items(sms_list, sending_result, state)

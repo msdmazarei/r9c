@@ -15,7 +15,6 @@ defmodule GatewayCore.Application do
       # Starts a worker by calling: GatewayCore.Worker.start_link(arg)
       # {GatewayCore.Worker, arg},
       {GatewayCore.GSMModemGateway.Supervisor, []}
-
     ]
 
     # See https://hexdocs.pm/elixir/Supervisor.html
@@ -24,21 +23,26 @@ defmodule GatewayCore.Application do
     rtn = Supervisor.start_link(children, opts)
     run_gsm_modems_gateway()
     rtn
-
   end
 
   def run_gsm_modems_gateway() do
     Logging.debug("config for modems are:~p", [Application.get_env(:gateway_core, :modems)])
+
     for modem <- Application.get_env(:gateway_core, :modems) do
       add_gsm_modem(modem)
     end
 
     gsm_gateway = Application.get_env(:gateway_core, :gsm_gateway)
     Logging.debug("Config for gsm_gateway:~p", [gsm_gateway])
-    if gsm_gateway != :nil do
-      Logging.debug("gsm_gateway is not nil so check output queue, output queue: ~p", [gsm_gateway[:q_out]])
-      if gsm_gateway[:q_out] != :nil do
+
+    if gsm_gateway != nil do
+      Logging.debug("gsm_gateway is not nil so check output queue, output queue: ~p", [
+        gsm_gateway[:q_out]
+      ])
+
+      if gsm_gateway[:q_out] != nil do
         Logging.debug("gsm_gateway has output queue so start its consumer...")
+
         DatabaseEngine.DurableQueue.start_consumer_group(
           gsm_gateway[:q_out],
           gsm_gateway[:q_out] <> "_consumer",
@@ -46,33 +50,32 @@ defmodule GatewayCore.Application do
         )
       end
 
-      if gsm_gateway[:q_in] != :nil do
-        Logging.debug("gsm_gateway has input queue so register to all incomping messages from modems...")
-        for {_, p, _, _} <- DynamicSupervisor.which_children(GatewayCore.GSMModemGateway.Supervisor) do
+      if gsm_gateway[:q_in] != nil do
+        Logging.debug(
+          "gsm_gateway has input queue so register to all incomping messages from modems..."
+        )
+
+        for {_, p, _, _} <-
+              DynamicSupervisor.which_children(GatewayCore.GSMModemGateway.Supervisor) do
           :simple_gsm_modem_over_tcp.register_to_inform_every_message(
             p,
             GatewayCore.Drivers.GsmModemDriver.Input,
             :receive_sms,
-            [gsm_gateway[:q_in] ]
+            [gsm_gateway[:q_in]]
           )
         end
-
       end
     end
-
-
-
   end
 
   def add_gsm_modem({address, port}) do
     child_spec = %{
       :id => "modem-#{address}-#{port}",
-      :start =>
-        {:simple_gsm_modem_over_tcp, :start_link,
-        [:binary.bin_to_list(address), port]},
+      :start => {:simple_gsm_modem_over_tcp, :start_link, [:binary.bin_to_list(address), port]},
       :restart => :permanent,
       :type => :worker
     }
+
     DynamicSupervisor.start_child(GatewayCore.GSMModemGateway.Supervisor, child_spec)
   end
 end

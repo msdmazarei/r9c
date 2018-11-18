@@ -38,8 +38,13 @@ defmodule GatewayCore.Outputs.IrMtn do
 
   def send_otp_list(otp_list, state) do
     Logging.debug("Called")
-    Logging.error("NO OTP METHOD DEFINED FOR ~p MODULE, BUT SOMEONE ARE SENDING OTP !!! OTP LIST:~p",[__MODULE__,otp_list])
-    r = {state, otp_list|> Enum.map(fn _ -> false end)}
+
+    Logging.error(
+      "NO OTP METHOD DEFINED FOR ~p MODULE, BUT SOMEONE ARE SENDING OTP !!! OTP LIST:~p",
+      [__MODULE__, otp_list]
+    )
+
+    r = {state, otp_list |> Enum.map(fn _ -> false end)}
     Logging.debug("Returns:~p", [r])
     r
   end
@@ -51,5 +56,4 @@ defmodule GatewayCore.Outputs.IrMtn do
     Logging.debug("Retuens:~p", [r])
     r
   end
-
 end

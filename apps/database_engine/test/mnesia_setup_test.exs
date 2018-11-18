@@ -44,7 +44,7 @@ defmodule MnesiaSetupTest do
       # populate with 1000 records.
       DbSetup.populate_db(nodes)
       # assert the record length is 1000
-      assert 1000 == TestTable |> :mnesia.dirty_all_keys |> length
+      assert 1000 == TestTable |> :mnesia.dirty_all_keys() |> length
     end
   end
 end

@@ -40,6 +40,7 @@ defmodule DatabaseEngine.Models.Charge.VAS do
   defstruct contact: nil,
             service_name: nil,
             service_id: nil,
+            # could contain "spid" for irmtn
             options: %{},
             internal_callback: nil,
             id: nil,

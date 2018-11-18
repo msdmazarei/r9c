@@ -4,6 +4,7 @@ defmodule GatewayCore.Outputs.Dummy do
   require Logger
   require Utilities.Logging
   alias Utilities.Logging
+  use GatewayCore.Outputs.Red9CobraSimpleOutGW
 
   @gateway_config Application.get_env(:gateway_core, Red9Cobra.DUMMY)
   @crash_p @gateway_config[:crash_probeblity]
@@ -16,6 +17,7 @@ defmodule GatewayCore.Outputs.Dummy do
 
   def gw_queue_list() do
     Logging.debug("Called")
+    Logging.debug("GC:~p", [@gateway_config])
 
     r = [
       in_Q: @gateway_config[:input_Q],
@@ -36,11 +38,18 @@ defmodule GatewayCore.Outputs.Dummy do
         crash_p = :rand.uniform()
         fail_p = :rand.uniform()
 
-        if crash_p > @crash_p do
+        Logging.debug("crashp:~p CRASHC:~p fail_p:~p FAILC:~p", [
+          crash_p,
+          @crash_p,
+          fail_p,
+          @fail_p
+        ])
+
+        if crash_p < @crash_p do
           throw(:crashed)
         end
 
-        if fail_p > @fail_p do
+        if fail_p < @fail_p do
           Logging.warn("COULD NOT SEND SMS id:~p", [x.id])
           false
         else

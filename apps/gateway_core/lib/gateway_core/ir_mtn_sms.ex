@@ -12,7 +12,7 @@ defmodule GatewayCore.Outputs.IRMTN.SMS do
   @error_codes @gateway_config[:error_codes]
   #  @default_max_daily_charge_sum @gateway_config[:max_user_charge_per_day]
   #  @default_max_daily_charge_retry_count @gateway_config[:max_user_charge_retry_count]
-#  @wsdl_action_endpoint @gateway_config[:wsdl_action_endpoint]
+  #  @wsdl_action_endpoint @gateway_config[:wsdl_action_endpoint]
   @basic_auth @gateway_config[:sms_center_auth]
 
   def build_sms(
@@ -123,7 +123,7 @@ defmodule GatewayCore.Outputs.IRMTN.SMS do
            }
          }
        ) do
-    template =@gateway_config |> GWConf.template(:send_sms)
+    template = @gateway_config |> GWConf.template(:send_sms)
     action = @gateway_config |> GWConf.action(:send_sms)
 
     {:ok,

@@ -96,7 +96,7 @@ defmodule DatabaseEngine.DurableQueue do
 
     case partitions do
       l when is_list(l) ->
-        Logging.debug("calulated partitions for topic: #{topic_name} are: ~p",[l])
+        Logging.debug("calulated partitions for topic: #{topic_name} are: ~p", [l])
         enqueue(topic_name, hd(l), object)
 
       [] ->

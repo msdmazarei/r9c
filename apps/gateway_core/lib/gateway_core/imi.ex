@@ -46,10 +46,14 @@ defmodule GatewayCore.Outputs.IMI do
 
   def send_charge_list(charge_list, state) do
     Logging.debug("Called")
-    Logging.error("NO CHARGE METHOD DEFINED FOR ~p MODULE, BUT SOMEONE ARE SENDING CHARGE !!! CHARGE LIST:~p",[__MODULE__,charge_list])
-    r = {state, charge_list|> Enum.map(fn _ -> false end)}
+
+    Logging.error(
+      "NO CHARGE METHOD DEFINED FOR ~p MODULE, BUT SOMEONE ARE SENDING CHARGE !!! CHARGE LIST:~p",
+      [__MODULE__, charge_list]
+    )
+
+    r = {state, charge_list |> Enum.map(fn _ -> false end)}
     Logging.debug("Returns:~p", [r])
     r
   end
-
 end
