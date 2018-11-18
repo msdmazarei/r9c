@@ -40,14 +40,14 @@ defmodule Utilities do
   def randnode do
     ## later, this needs to be fixed and cached.
     randseed()
-    allnodes() |> Enum.shuffle() |> hd
+    all_active_nodes() |> Enum.shuffle() |> hd
   end
 
   @doc """
       gets already active nodes in cluster.
   """
-  @spec allnodes() :: list(Atom.t())
-  def allnodes() do
+  @spec all_active_nodes() :: list(Atom.t())
+  def all_active_nodes() do
     Node.list() ++ [node()]
   end
 

@@ -139,4 +139,5 @@ defimpl DatabaseEngine.DurableQueue.Deserialize,
         result
     end
   end
+
 end

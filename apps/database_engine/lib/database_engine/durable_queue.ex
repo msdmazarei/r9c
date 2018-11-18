@@ -27,7 +27,7 @@ defmodule DatabaseEngine.DurableQueue do
     end
   end
 
-  @spec deserialize(String.t()) :: any() | nil
+  @spec deserialize(String.t()) :: term | nil
   def deserialize(string) do
     Logging.debug("Called with parameters: #{string}")
 
@@ -59,6 +59,9 @@ defmodule DatabaseEngine.DurableQueue do
         object: ~p
       """,
       [partition_number, object]
+
+
+
     )
 
     case serialize(object) do
