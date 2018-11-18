@@ -84,10 +84,11 @@ defmodule DatabaseEngine.Mnesia.DbSetup do
     key = :hasan
     value = :rahim
 
-    pck = {TestTable, idx, data2, data3, data4}
+    pck = {KVTb, idx, key, value}
 
     {:atomic, :ok} =
       :mnesia.transaction(fn ->
+        #Logger.debug(fn -> "test record #{idx} is inserting to database" end)
         :ok = :mnesia.write(pck)
       end)
   end

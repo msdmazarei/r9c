@@ -34,7 +34,7 @@ defmodule DatabaseEngine.Interface.Auth do
     end)
   end
 
-  @spec add_user(Map.t()) :: String.t()
+  @spec add_user(Map.t()) :: {:atomic, Atom.t(), Atom.t()} | {:atomic, :ok, String.t()}
   @doc """
    Adds a user by getting AuthUser struct and returens idx.
    The default permission for user will be :guest access.
@@ -44,7 +44,7 @@ defmodule DatabaseEngine.Interface.Auth do
   def add_user(user) do
     case get_user(user.domain, user.key) do
       {:atomic, {:not_found, _}} ->
-        {:atomic, :ok} =
+      {:atomic, } ->
           :mnesia.transaction(fn ->
             idx = UUID.uuid4()
             gidx = UUID.uuid4()
@@ -55,7 +55,8 @@ defmodule DatabaseEngine.Interface.Auth do
 
             :mnesia.write({AuthGroupTb, gidx, idx})
             :mnesia.write({AuthMembershipTb, UUID.uuid4(), idx, gidx})
-            :mnesia.write(pck)
+            :ok = :mnesia.write(pck)
+            {:ok, idx}
           end)
 
       {:atomic, _} ->
@@ -141,7 +142,6 @@ defmodule DatabaseEngine.Interface.Auth do
                |> length do
             0 ->
               pck = {AuthPermissionTb, UUID.uuid4(), usergroup |> elem(1), permission}
-
 
               :mnesia.write(pck)
 

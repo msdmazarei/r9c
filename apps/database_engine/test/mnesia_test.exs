@@ -3,36 +3,56 @@ defmodule MnesiaTest do
   import ExUnit.CaptureLog
   alias DatabaseEngine.Mnesia.DbSetup, as: DbSetup
 
-    setup_all do
-      # set a temperary directory.
-      Application.put_env(:mnesia, :dir, '/tmp/dbengine_unittests_#{UUID.uuid4()}')
-      DbSetup.initialize
-      DbSetup.create_tables
-      assert :stopped = DbSetup.stop_mnesia
-      assert :ok = DbSetup.start_mnesia
+  setup_all do
+    # set a temperary directory.
+    Application.put_env(:mnesia, :dir, '/tmp/dbengine_unittests_#{UUID.uuid4()}')
+    DbSetup.initialize()
+    DbSetup.create_tables()
+    assert :stopped = DbSetup.stop_mnesia()
+    assert :ok = DbSetup.start_mnesia()
+    Process.sleep 1000 # wait for tables to create
+    :ok
+
+    on_exit(fn ->
+      # test schema deletion.
+      nodes = Utilities.all_active_nodes()
+
+      capture_log(fn ->
+        assert :ok == DbSetup.delete_schema(nodes)
+      end) =~ "database schema deleted."
+
       :ok
+    end)
+  end
 
-      on_exit(fn ->
-        # test schema deletion.
-        nodes = Utilities.all_active_nodes()
+  describe "Mnesia functionality" do
+    test "populating database" do
+      nodes = Utilities.all_active_nodes()
+      DbSetup.populate_db(nodes)
 
-        capture_log(fn ->
-          assert :ok == DbSetup.delete_schema(nodes)
-        end) =~ "database schema deleted."
-
-        :ok
-      end)
+      assert {:atomic, _} =
+               :mnesia.transaction(fn ->
+                 :mnesia.all_keys(KVTb) |> length
+               end)
     end
+  end
 
-  describe "Auth" do
+  describe "Auth tables" do
+    test "creating a user" do
+      usr = %DatabaseEngine.Struct.AuthUser{
+        key: UUID.uuid4(),
+        name: "farsheed",
+        company: "sPod",
+        contact_number: "989120228207",
+        email: "rodmena@me.com",
+        domain: "sPod"
+      }
 
-    test "creating and removing users" do
-      :ok
-      # test mnesia stop and also capture stop info log.
-      # populate with 1000 records.
-      #DbSetup.populate_db(nodes)
-      # assert the record length is 1000
-      #assert 1000 == TestTable |> :mnesia.dirty_all_keys() |> length
+      DatabaseEngine.Interface.Auth.add_user(usr)
+
+      assert 1 == 1
+
+
     end
   end
 end
