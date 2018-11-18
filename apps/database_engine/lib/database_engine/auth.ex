@@ -44,20 +44,22 @@ defmodule DatabaseEngine.Interface.Auth do
   def add_user(user) do
     case get_user(user.domain, user.key) do
       {:atomic, {:not_found, _}} ->
-      {:atomic, } ->
-          :mnesia.transaction(fn ->
-            idx = UUID.uuid4()
-            gidx = UUID.uuid4()
+        :ok
 
-            pck =
-              {AuthUserTb, idx, user.key, user.domain, user |> Map.put(:idx, idx),
-               %DatabaseEngine.Struct.TableInternalData{unixtime: Utilities.now()}}
+      {:atomic} ->
+        :mnesia.transaction(fn ->
+          idx = UUID.uuid4()
+          gidx = UUID.uuid4()
 
-            :mnesia.write({AuthGroupTb, gidx, idx})
-            :mnesia.write({AuthMembershipTb, UUID.uuid4(), idx, gidx})
-            :ok = :mnesia.write(pck)
-            {:ok, idx}
-          end)
+          pck =
+            {AuthUserTb, idx, user.key, user.domain, user |> Map.put(:idx, idx),
+             %DatabaseEngine.Struct.TableInternalData{unixtime: Utilities.now()}}
+
+          :mnesia.write({AuthGroupTb, gidx, idx})
+          :mnesia.write({AuthMembershipTb, UUID.uuid4(), idx, gidx})
+          :ok = :mnesia.write(pck)
+          {:ok, idx}
+        end)
 
       {:atomic, _} ->
         {:error, :conflict, :rce9001}

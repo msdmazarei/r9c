@@ -84,11 +84,11 @@ defmodule DatabaseEngine.Mnesia.DbSetup do
     key = :hasan
     value = :rahim
 
-    pck = {KVTb, idx, key, value}
+    pck = {KVTb, key, value}
 
     {:atomic, :ok} =
       :mnesia.transaction(fn ->
-        #Logger.debug(fn -> "test record #{idx} is inserting to database" end)
+        # Logger.debug(fn -> "test record #{idx} is inserting to database" end)
         :ok = :mnesia.write(pck)
       end)
   end
@@ -119,7 +119,7 @@ defmodule DatabaseEngine.Mnesia.DbSetup do
        :flag_idx
      ]},
     {EventTb, [:idx, :correlator_idx]},
-    {KVTb, [:idx, :key_idx, :value]}
+    {KVTb, [:key, :value]}
   ]
 
   def create_tables do

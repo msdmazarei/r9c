@@ -10,7 +10,8 @@ defmodule MnesiaTest do
     DbSetup.create_tables()
     assert :stopped = DbSetup.stop_mnesia()
     assert :ok = DbSetup.start_mnesia()
-    Process.sleep 1000 # wait for tables to create
+    # wait for tables to create
+    Process.sleep(1000)
     :ok
 
     on_exit(fn ->
@@ -51,8 +52,6 @@ defmodule MnesiaTest do
       DatabaseEngine.Interface.Auth.add_user(usr)
 
       assert 1 == 1
-
-
     end
   end
 end
