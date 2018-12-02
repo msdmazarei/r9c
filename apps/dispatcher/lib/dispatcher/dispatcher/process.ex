@@ -72,7 +72,8 @@ defmodule Dispatcher.Process do
 
     wait_to_response_or_timeout(
       Utilities.now(),
-      results,process_message_tuples
+      results,
+      process_message_tuples
     )
   end
 
@@ -84,7 +85,7 @@ defmodule Dispatcher.Process do
     end
   end
 
-  def wait_to_response_or_timeout(start_time, final_result,process_message_tuples) do
+  def wait_to_response_or_timeout(start_time, final_result, process_message_tuples) do
     Logging.debug("Called With Params, start_time:~p final-result:~p", [start_time, final_result])
 
     all_of_items_are_boolean =
@@ -100,29 +101,32 @@ defmodule Dispatcher.Process do
             final_result
             |> Enum.map(&ok_nok_to_boolean/1)
             |> Enum.with_index()
-            |> Enum.map(fn {x,index} ->
+            |> Enum.map(fn {x, index} ->
               if is_boolean(x) do
                 x
               else
                 if is_pid(x) do
-                  Logging.debug("PARSE PID X TO FIND OUT RESULT:~p",[x])
+                  Logging.debug("PARSE PID X TO FIND OUT RESULT:~p", [x])
+
                   case :rpc.nb_yield(x, 0) do
                     :timeout ->
                       x
 
                     {:value, v} ->
                       case v do
-                        r when is_boolean(r) -> r
-                        {:badrpc,{:'EXIT',{:noproc,_}}} ->
-                          Logging.debug("EXITED PROCESS!!!")
-                          {pname,msg} = process_message_tuples|> Enum.at(index)
-                          Logging.debug("there is no process for pname:~p",[pname])
-                          Mnesia.transaction(fn -> Mnesia.dirty_delete({@table_name,pname}) end)
-                          send_message({pname,msg})
+                        r when is_boolean(r) ->
+                          r
 
-                          _->
-                          Logging.debug("RPC VALUE is :~p",[v])
-                            v
+                        {:badrpc, {:EXIT, {:noproc, _}}} ->
+                          Logging.debug("EXITED PROCESS!!!")
+                          {pname, msg} = process_message_tuples |> Enum.at(index)
+                          Logging.debug("there is no process for pname:~p", [pname])
+                          Mnesia.transaction(fn -> Mnesia.dirty_delete({@table_name, pname}) end)
+                          send_message({pname, msg})
+
+                        _ ->
+                          Logging.debug("RPC VALUE is :~p", [v])
+                          v
                       end
 
                     other ->
@@ -136,7 +140,7 @@ defmodule Dispatcher.Process do
             end)
 
           Process.sleep(100)
-          wait_to_response_or_timeout(start_time, new_results,process_message_tuples)
+          wait_to_response_or_timeout(start_time, new_results, process_message_tuples)
         else
           # timeouted
           final_result
@@ -183,7 +187,7 @@ defmodule Dispatcher.Process do
                 node_name,
                 GenServer,
                 :call,
-                [pid, message, @user_process_timeout]
+                [pid, {:ingress, message}, @user_process_timeout]
               )
 
             Logging.debug("async_call result:~p", [r])
@@ -244,16 +248,17 @@ defmodule Dispatcher.Process do
     create_process(
       name,
       get_module_by_message(message),
-      Utilities.all_user_process_nodes()
+      Utilities.all_user_process_nodes(),
+      message
     )
   end
 
-  def create_process(_, _, []) do
+  def create_process(_, _, [], _) do
     Logging.debug("no nodes passed")
     false
   end
 
-  def create_process(name, module, nodes) do
+  def create_process(name, module, nodes, message) do
     Logging.debug("Called With params, name:~p module:~p nodes:~p", [name, module, nodes])
     selected_node = nodes |> Enum.shuffle() |> hd()
 
@@ -261,7 +266,7 @@ defmodule Dispatcher.Process do
            selected_node,
            Dispatcher.Process,
            :start_local_gen_server,
-           [module],
+           [module, %{"cell_no" => name}],
            @process_creation_timeout
          ) do
       {:badrpc, reason} ->
