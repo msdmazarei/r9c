@@ -80,7 +80,7 @@ defmodule DatabaseEngine.Mnesia.DbSetup do
 
   @spec insert_test_record() :: {:atomic, :ok}
   def insert_test_record do
-    idx = UUID.uuid4()
+    # idx = UUID.uuid4()
     key = :hasan
     value = :rahim
 
@@ -107,6 +107,7 @@ defmodule DatabaseEngine.Mnesia.DbSetup do
     {ServiceTb, [:idx, :type_idx, :cel_id, :whitelist, :options, :_internal]},
     {AppTb, [:idx, :service_idx, :apikeys, :options, :_internal]},
     {ApikeyTb, [:idx, :key_idx, :net_acl_idx, :options, :_internal]},
+    {ProcessTb, [:idx, :model]},
     {SubscriptionTb,
      [
        :idx,
