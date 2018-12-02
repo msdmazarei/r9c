@@ -1,16 +1,17 @@
 defmodule Apiserver.Application do
+  # See https://hexdocs.pm/elixir/Application.html
+  # for more information on OTP Applications
   @moduledoc false
+
   use Application
 
   def start(_type, _args) do
-    import Supervisor.Spec
-
-    # Define workers and child supervisors to be supervised
+    # List all child processes to be supervised
     children = [
       # Start the endpoint when the application starts
-      supervisor(Apiserver.Endpoint, [])
-      # Start your own worker by calling: Apiserver.Worker.start_link(arg1, arg2, arg3)
-      # worker(Apiserver.Worker, [arg1, arg2, arg3]),
+      ApiserverWeb.Endpoint
+      # Starts a worker by calling: Apiserver.Worker.start_link(arg)
+      # {Apiserver.Worker, arg},
     ]
 
     # See https://hexdocs.pm/elixir/Supervisor.html
@@ -22,7 +23,7 @@ defmodule Apiserver.Application do
   # Tell Phoenix to update the endpoint configuration
   # whenever the application is updated.
   def config_change(changed, _new, removed) do
-    Apiserver.Endpoint.config_change(changed, removed)
+    ApiserverWeb.Endpoint.config_change(changed, removed)
     :ok
   end
 end

@@ -38,16 +38,16 @@ defmodule DatabaseEngine.Interface.KV do
     end)
   end
 
-  @spec inc(String.t()) :: {:atomic, Integer.t()} | {:atmoic, :error}
+  @spec incr(String.t(), Integer.t()) :: {:atomic, Integer.t()} | {:atmoic, :error}
   @doc """
    Increases a value based on given key.
    Returrns ```0``` in case key is not yet created.
   """
-  def inc(key) do
+  def incr(key, by \\ 1) do
     :mnesia.transaction(fn ->
       case :mnesia.read(KVTb, key) do
         [{KVTb, _, value}] when is_integer(value) ->
-          nv = value + 1
+          nv = value + by
           pck = {KVTb, key, nv}
           :mnesia.write(pck)
           nv
@@ -56,9 +56,9 @@ defmodule DatabaseEngine.Interface.KV do
           :error
 
         [] ->
-          pck = {KVTb, key, 1}
-          {:mnesia.write(pck), 1}
-          1
+          pck = {KVTb, key, by}
+          {:mnesia.write(pck), by}
+          by
       end
     end)
   end

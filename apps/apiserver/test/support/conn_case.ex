@@ -1,11 +1,11 @@
-defmodule Apiserver.ConnCase do
+defmodule ApiserverWeb.ConnCase do
   @moduledoc """
   This module defines the test case to be used by
   tests that require setting up a connection.
 
   Such tests rely on `Phoenix.ConnTest` and also
   import other functionality to make it easier
-  to build common datastructures and query the data layer.
+  to build common data structures and query the data layer.
 
   Finally, if the test case interacts with the database,
   it cannot be async. For this reason, every test runs
@@ -19,10 +19,10 @@ defmodule Apiserver.ConnCase do
     quote do
       # Import conveniences for testing with connections
       use Phoenix.ConnTest
-      import Apiserver.Router.Helpers
+      alias ApiserverWeb.Router.Helpers, as: Routes
 
       # The default endpoint for testing
-      @endpoint Apiserver.Endpoint
+      @endpoint ApiserverWeb.Endpoint
     end
   end
 

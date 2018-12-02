@@ -3,28 +3,25 @@
 #
 # This configuration file is loaded before any dependency and
 # is restricted to this project.
-use Mix.Config
 
 # General application configuration
-config :apiserver,
-  namespace: Apiserver
+use Mix.Config
 
 # Configures the endpoint
-config :apiserver, Apiserver.Endpoint,
+config :apiserver, ApiserverWeb.Endpoint,
   url: [host: "localhost"],
-  secret_key_base: "VruaFd4lBYmtZgbPugQdnKdDJ9L56TcacwSc34ggmcgHdETnhssmsy6tcUcOQVO3",
-  render_errors: [view: Apiserver.ErrorView, accepts: ~w(json)],
-  pubsub: [name: Apiserver.PubSub,
-           adapter: Phoenix.PubSub.PG2]
+  secret_key_base: "VQKSawWtG6aA8q4VSw4rrWbU39Ta0noM9yUEYl4R2GcWoupE978h52bspv1ydql3",
+  render_errors: [view: ApiserverWeb.ErrorView, accepts: ~w(html json)],
+  pubsub: [name: Apiserver.PubSub, adapter: Phoenix.PubSub.PG2]
 
 # Configures Elixir's Logger
 config :logger, :console,
   format: "$time $metadata[$level] $message\n",
   metadata: [:request_id]
 
-config :apiserver, :generators,
-  context_app: false
+# Use Jason for JSON parsing in Phoenix
+config :phoenix, :json_library, Jason
 
 # Import environment specific config. This must remain at the bottom
 # of this file so it overrides the configuration defined above.
-import_config "#{Mix.env}.exs"
+import_config "#{Mix.env()}.exs"
