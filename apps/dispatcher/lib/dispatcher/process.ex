@@ -78,6 +78,7 @@ defmodule Dispatcher.Process do
     end
   end
 
+  @spec wait_to_response_or_timeout(integer(), list(), list()) :: list(boolean())
   def wait_to_response_or_timeout(start_time, final_result, process_message_tuples) do
     Logging.debug("Called With Params, start_time:~p final-result:~p", [start_time, final_result])
 
@@ -86,6 +87,7 @@ defmodule Dispatcher.Process do
 
     case all_of_items_are_boolean do
       true ->
+        send_failed_dispatched_to_kafka(final_result, process_message_tuples)
         final_result
 
       false ->
@@ -141,19 +143,56 @@ defmodule Dispatcher.Process do
           wait_to_response_or_timeout(start_time, new_results, process_message_tuples)
         else
           # timeouted
+          final_result =
+            final_result
+            |> Enum.map(&ok_nok_to_boolean/1)
+            |> Enum.map(fn x ->
+              if is_boolean(x) do
+                x
+              else
+                false
+              end
+            end)
+
+          send_failed_dispatched_to_kafka(final_result, process_message_tuples)
+
           final_result
-          |> Enum.map(&ok_nok_to_boolean/1)
-          |> Enum.map(fn x ->
-            if is_boolean(x) do
-              x
-            else
-              false
-            end
-          end)
         end
     end
   end
 
+  @dispatcher_fail_Q "dispatcher_fail_Q"
+
+  defp send_failed_dispatched_to_kafka(final_result, process_message_tuples) do
+    Logging.debug("Called. final result:~p", [final_result])
+
+    to_fail_Q =
+      final_result
+      |> Enum.with_index()
+      |> Enum.map(fn {item, index} ->
+        if item == false do
+          process_message_tuples |> Enum.at(index)
+        else
+          nil
+        end
+      end)
+      |> Enum.filter(fn x -> x != nil end)
+      |> Enum.map(fn {pname, msg} ->
+        case DatabaseEngine.DurableQueue.enqueue(@dispatcher_fail_Q, msg) do
+          :nok ->
+            Logging.warn("Problem To Enqueue messages to dispatcher fail Q. for pname:~p", [pname])
+
+          _ ->
+            Logging.debug("successfully enqueued to dispatcher failed Q, process name :~p", [
+              pname
+            ])
+
+            :ok
+        end
+      end)
+  end
+
+  @spec send_message({String.t(), DatabaseEngine.Models.SMS}) :: pid() | boolean()
   def send_message(args = {process_name, message}) do
     Logging.debug("Called With args:~p", [args])
 

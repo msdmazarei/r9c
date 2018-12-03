@@ -100,7 +100,7 @@ defmodule Dispatcher.Process.VAS.UserProcess.Script do
   def logging(args, state) do
     Logging.debug("cel logging called with args:~p", [args])
     ups = get_user_process_state()
-    Logging.debug("User Process State:~p",[ups])
+    Logging.debug("User Process State:~p", [ups])
     logging_queue = Kernel.get_in(ups.queues, [:cel_logging_Q])
 
     case logging_queue do
@@ -109,7 +109,8 @@ defmodule Dispatcher.Process.VAS.UserProcess.Script do
 
       _ ->
         [level, msg] = args
-        Logging.debug("level:~p , msg:~p",[level,msg])
+        Logging.debug("level:~p , msg:~p", [level, msg])
+
         data_to_enqueue = %{
           "level" => level,
           "message" => msg,
@@ -118,7 +119,8 @@ defmodule Dispatcher.Process.VAS.UserProcess.Script do
           "sms_sender" => get_orig_message(state).sender,
           "time" => Utilities.now()
         }
-        Logging.debug("data_to_enqueue:~p",[data_to_enqueue])
+
+        Logging.debug("data_to_enqueue:~p", [data_to_enqueue])
 
         case DatabaseEngine.DurableQueue.enqueue(logging_queue, data_to_enqueue) do
           :nok ->
