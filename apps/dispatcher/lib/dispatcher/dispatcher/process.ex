@@ -18,13 +18,6 @@ defmodule Dispatcher.Process do
   @table_name Dispatcher.Process.ProcessModel
   alias :mnesia, as: Mnesia
 
-  def init_mnesia() do
-    Mnesia.create_table(@table_name,
-      attributes: [:name, :process_model],
-      ram_copies: Utilities.all_user_process_nodes()
-    )
-  end
-
   def get_sample_sms(mobno) do
     %DatabaseEngine.Models.SMS{
       receiver: mobno,
@@ -121,7 +114,12 @@ defmodule Dispatcher.Process do
                           Logging.debug("EXITED PROCESS!!!")
                           {pname, msg} = process_message_tuples |> Enum.at(index)
                           Logging.debug("there is no process for pname:~p", [pname])
-                          Mnesia.transaction(fn -> Mnesia.dirty_delete({@table_name, pname}) end)
+
+                          Mnesia.transaction(fn ->
+                            DatabaseEngine.Interface.Process.del(pname)
+                            #                            Mnesia.dirty_delete({@table_name, pname})
+                          end)
+
                           send_message({pname, msg})
 
                         _ ->
@@ -156,21 +154,24 @@ defmodule Dispatcher.Process do
     end
   end
 
-  def send_message({process_name, message}) do
+  def send_message(args = {process_name, message}) do
+    Logging.debug("Called With args:~p", [args])
+
     tran_res =
       Mnesia.transaction(fn ->
+        #          case Mnesia.read({@table_name, process_name}) do
         result =
-          case Mnesia.read({@table_name, process_name}) do
+          case DatabaseEngine.Interface.Process.get(process_name) do
             {:aborted, reason} ->
               Logging.error("could not get_process_model cause of :~p", [reason])
               false
 
-            [] ->
+            v when v in [[], nil] ->
               process_creation_result = create_process(process_name, message)
               Logging.debug("Process creation result:~p", [process_creation_result])
               process_creation_result
 
-            [{_, _, process_model}] ->
+            process_model = %Dispatcher.Process.ProcessModel{} ->
               Logging.debug("Process Model:~p", [process_model])
               process_model
           end
@@ -233,7 +234,8 @@ defmodule Dispatcher.Process do
 
         Mnesia.transaction(fn ->
           Logging.debug("deleting entry in mnesia")
-          r = Mnesia.delete({@table_name, name})
+          r = DatabaseEngine.Interface.Process.del(name)
+          #          r = Mnesia.delete({@table_name, name})
           Logging.debug("delete status:~p", [r])
         end)
 
@@ -283,7 +285,8 @@ defmodule Dispatcher.Process do
           start_time: Utilities.now()
         }
 
-        case Mnesia.write({@table_name, name, process_model}) do
+        #        case Mnesia.write({@table_name, name, process_model}) do
+        case DatabaseEngine.Interface.Process.set(name, process_model) do
           :ok ->
             Logging.debug("process_model:~p stored.", [process_model])
             process_model
