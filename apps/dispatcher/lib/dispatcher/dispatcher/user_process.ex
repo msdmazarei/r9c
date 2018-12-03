@@ -10,8 +10,8 @@ defmodule Dispatcher.Process.VAS.UserProcess do
 
   use GenServer
 
-  @wait_to_new_message_timeout_to_hibernate 15_000
-  @wait_to_new_message_timeout_to_terminate 60_000
+  @wait_to_new_message_timeout_to_hibernate 60_000
+  @wait_to_new_message_timeout_to_terminate 600_000
   @check_last_arrived_message_time :check_last_arrived_message_time
 
   defmodule State do
@@ -19,7 +19,11 @@ defmodule Dispatcher.Process.VAS.UserProcess do
       defstruct(
         cell_no: nil,
         last_arrived_message_time: nil,
-        lua_state: nil,
+        queues: %{
+          success_Q: "user_process_success_Q",
+          fail_Q: "user_process_fail_Q",
+          cel_logging_Q: "user_process_logging_Q"
+        },
         cel_script_limits: %{
           run_timeout: 20_000,
           http_call_limit: 20
@@ -32,9 +36,23 @@ defmodule Dispatcher.Process.VAS.UserProcess do
     GenServer.start_link(__MODULE__, state, opts)
   end
 
-  def init(%{"cell_no" => cell_no}) do
+  def init(args = %{"cell_no" => cell_no}) do
     watchdog()
-    {:ok, %State{cell_no: cell_no, last_arrived_message_time: Utilities.now()}}
+    init_state = %State{cell_no: cell_no, last_arrived_message_time: Utilities.now()}
+
+    state =
+      Enum.reduce(Map.keys(init_state), init_state, fn item, s ->
+        arg_item = Map.get(args, item)
+
+        if arg_item == nil do
+          s
+        else
+          Map.put(s, item, arg_item)
+        end
+      end)
+
+    Logging.debug("initialize state: ~p", [state])
+    {:ok, state}
     #    {:ok, %{"last_arrived_message_time" => Utilities.now(), "cell_no" => cell_no}}
   end
 
@@ -52,6 +70,51 @@ defmodule Dispatcher.Process.VAS.UserProcess do
     {:reply, msg, state}
   end
 
+  defp send_to_queue(cell_no, result, sms, queue_name) do
+    case DatabaseEngine.DurableQueue.enqueue(queue_name, %{
+           "sms" => sms,
+           "script_result" => result,
+           "cell_no" => cell_no,
+           "time" => Utilities.now()
+         }) do
+      :nok ->
+        Logging.warn("problem to enqueue to Q: ~p", [queue_name])
+
+      _ ->
+        :ok
+    end
+  end
+
+  defp send_to_queue(
+         {:return, result},
+         sms,
+         state = %State{queues: %{success_Q: queue_name}, cell_no: cell_no}
+       ) do
+    Logging.debug("Called - :success , result is: ~p", [result])
+    send_to_queue(cell_no, result, sms, queue_name)
+  end
+
+  defp send_to_queue(
+         {:error, result},
+         sms,
+         state = %State{queues: %{fail_Q: queue_name}, cell_no: cell_no}
+       ) do
+    Logging.debug("Called - :error, result is:~p", [result])
+
+    result =
+      if is_map(result) do
+        if Map.get(result, :__exception__) != nil do
+          :io_lib.format("~p", [result])
+        else
+          result
+        end
+      else
+        result
+      end
+
+    send_to_queue(cell_no, result, sms, queue_name)
+  end
+
   def handle_call(
         {:ingress, sms = %DatabaseEngine.Models.SMS{sender: cell_no, receiver: service_no}},
         _from,
@@ -59,9 +122,40 @@ defmodule Dispatcher.Process.VAS.UserProcess do
       ) do
     Logging.debug("ingress sms :~p arrived", [sms])
     Logging.debug("~p get service definition for ~p", [cell_no, service_no])
+    script = get_service_script(sms, state)
+
+    send_to_queue(
+      Dispatcher.Process.VAS.UserProcess.Script.run_script(
+        script,
+        sms,
+        state,
+        state.cel_script_limits.run_timeout
+      ),
+      sms,
+      state
+    )
 
     state = %State{state | last_arrived_message_time: Utilities.now()}
     {:reply, :ok, state}
+  end
+
+  @compile {:inline, get_script_run_timeout: 2}
+  defp get_script_run_timeout(_sms, state) do
+    state.cel_script_limits.run_timeout
+  end
+
+  @compile {:inline, get_service_script: 2}
+  defp get_service_script(sms, state) do
+    """
+      print("hello world")
+      print("message sender is: ",cel.incoming_message.sender)
+      cel.log("debug","hello, this is a kafka enqueue call for script")
+      jafar = 1 / 0
+      print ("jafar = ", jafar)
+    """
+  end
+
+  defp get_service_definition(msg) do
   end
 
   def handle_call(

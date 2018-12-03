@@ -10,9 +10,14 @@ defmodule Dispatcher.Process.VAS.UserProcess.Script do
   alias :luerl, as: LUA
 
   @orig_message_key :orig_message_key
-
-
-  def run_script(script_to_run, msg = %DatabaseEngine.Models.SMS{}, script_run_timeout \\ 5000) do
+  @spec run_script(String.t(), DatabaseEngine.Models.SMS, any(), integer()) ::
+          {:return, any()} | {:error, any()}
+  def run_script(
+        script_to_run,
+        msg = %DatabaseEngine.Models.SMS{},
+        user_process_state,
+        script_run_timeout \\ 5000
+      ) do
     main_process_id = self()
     ref = make_ref()
 
@@ -20,15 +25,16 @@ defmodule Dispatcher.Process.VAS.UserProcess.Script do
       Process.spawn(
         fn ->
           try do
-
             lua_state = init_lua(msg)
 
             set_orig_message(msg, lua_state)
+            set_user_process_state(user_process_state)
+
             {r, _} = LUA.do(script_to_run, lua_state)
             send(main_process_id, {:script, ref, :return, r})
           rescue
             e ->
-              Logging.debug("Exception happen it is :~p",[e])
+              Logging.debug("Exception happen it is :~p", [e])
               send(main_process_id, {:script, ref, :error, e})
           end
         end,
@@ -38,22 +44,34 @@ defmodule Dispatcher.Process.VAS.UserProcess.Script do
     receive do
       {:script, m, status, r} when m == ref ->
         Logging.debug("script returned with state:~p and result:~p", [status, r])
+        {status, r}
     after
       script_run_timeout ->
         Logging.debug("script timeouted then kill it")
         Process.exit(pid, :kill)
+        {:error, "timeout"}
     end
   end
 
-
+  @compile {:inline, get_orig_message: 1}
   defp get_orig_message(_state) do
     Process.get(@orig_message_key)
   end
 
+  @compile {:inline, set_orig_message: 2}
   defp set_orig_message(msg, _state) do
     Process.put(@orig_message_key, msg)
   end
 
+  @compile {:inline, set_user_process_state: 1}
+  defp set_user_process_state(state) do
+    Process.put(:user_process_state, state)
+  end
+
+  @compile {:inline, get_user_process_state: 0}
+  defp get_user_process_state() do
+    Process.get(:user_process_state)
+  end
 
   @spec http_request_limit(any) :: map()
   defp http_request_limit(_state) do
@@ -77,6 +95,42 @@ defmodule Dispatcher.Process.VAS.UserProcess.Script do
     [item, list] = args
     result = list |> Enum.map(fn {_, x} -> x end) |> Enum.find(fn x -> x == item end) != nil
     {[result], state}
+  end
+
+  def logging(args, state) do
+    Logging.debug("cel logging called with args:~p", [args])
+    ups = get_user_process_state()
+    Logging.debug("User Process State:~p",[ups])
+    logging_queue = Kernel.get_in(ups.queues, [:cel_logging_Q])
+
+    case logging_queue do
+      nil ->
+        Logging.debug("No Cel Logging Queue Found, ignore logging")
+
+      _ ->
+        [level, msg] = args
+        Logging.debug("level:~p , msg:~p",[level,msg])
+        data_to_enqueue = %{
+          "level" => level,
+          "message" => msg,
+          "type" => "cel.logging",
+          "pid_name" => ups.cell_no,
+          "sms_sender" => get_orig_message(state).sender,
+          "time" => Utilities.now()
+        }
+        Logging.debug("data_to_enqueue:~p",[data_to_enqueue])
+
+        case DatabaseEngine.DurableQueue.enqueue(logging_queue, data_to_enqueue) do
+          :nok ->
+            Logging.warn("Problem to enqueue cel logging. data:~p", data_to_enqueue)
+
+          _ ->
+            Logging.debug("Successfully Enqueued.")
+            :ok
+        end
+    end
+
+    {[true], state}
   end
 
   def is_subscribed(_args, state) do
@@ -209,7 +263,6 @@ defmodule Dispatcher.Process.VAS.UserProcess.Script do
     {[Utilities.Conversion.nested_map_to_tuple_list(resp)], state}
   end
 
-
   defp init_lua(msg) do
     s0 = LUA.init()
     incoming_message = Utilities.Conversion.nested_map_to_tuple_list(msg)
@@ -223,6 +276,7 @@ defmodule Dispatcher.Process.VAS.UserProcess.Script do
           "unsubscribe" => &unsubscribe/2,
           "in_array" => &in_array/2,
           "reply" => &reply/2,
+          "log" => &logging/2,
           "service" =>
             Map.to_list(%{
               "unsub_keys" => ["a", "13", "43", "1234"]
@@ -236,6 +290,7 @@ defmodule Dispatcher.Process.VAS.UserProcess.Script do
         }),
         s0
       )
+
     s1
   end
 end
