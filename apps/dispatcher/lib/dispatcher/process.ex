@@ -52,7 +52,7 @@ defmodule Dispatcher.Process do
   def get_process_name_by_message(message) do
     case message do
       %DatabaseEngine.Models.SMS{
-        receiver: receiver
+        sender: receiver
       } ->
         receiver
     end

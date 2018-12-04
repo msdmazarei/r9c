@@ -8,7 +8,6 @@ defmodule Dispatcher.Application do
   require Utilities.Logging
   alias Utilities.Logging
 
-
   def start(_type, _args) do
     # List all child processes to be supervised
     children = [
@@ -27,7 +26,7 @@ defmodule Dispatcher.Application do
     input_queues = Application.get_env(:dispatcher, :input_queues)
     Logging.debug("config for input queues for dispatcher are:~p", [input_queues])
 
-    input_queues
+    input_queues[node()]
     |> Enum.map(fn q_name ->
       case DatabaseEngine.DurableQueue.start_consumer_group(
              q_name,
@@ -40,6 +39,5 @@ defmodule Dispatcher.Application do
         _ -> :ok
       end
     end)
-
   end
 end

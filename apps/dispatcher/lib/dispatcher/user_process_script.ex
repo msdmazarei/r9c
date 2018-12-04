@@ -148,6 +148,7 @@ defmodule Dispatcher.Process.VAS.UserProcess.Script do
     Logging.debug("reply called. args:~p~n", [args])
     [msg_text | _] = args
     orig_msg = get_orig_message(state)
+    Logging.debug("orig_msg: ~p", [orig_msg])
 
     msg_to_send = %DatabaseEngine.Models.SMS{
       orig_msg

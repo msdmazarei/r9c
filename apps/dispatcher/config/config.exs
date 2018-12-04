@@ -29,8 +29,8 @@ use Mix.Config
 #
 #     import_config "#{Mix.env()}.exs"
 
-
 config :dispatcher,
-       input_queues: [
-         "in_dummy","in_imi","in_irmtn"
-       ]
+  input_queues: [
+    "n2@s1.kafka.local": ["in_dummy"],
+    "n1@s1.kafka.local": ["in_imi", "in_irmtn"]
+  ]
