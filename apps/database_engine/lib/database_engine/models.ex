@@ -29,6 +29,7 @@ defmodule DatabaseEngine.Models.SMS do
             # could contains "reply_to_message" key which specifies
             # the original message that current message is replied
             # to it
+            # could contains "gateway" which specify gateway like: "DUMMY","IMI","IRMTN"
             options: %{},
             internal_callback: nil
 end
@@ -118,8 +119,16 @@ defimpl DatabaseEngine.DurableQueue.Deserialize,
 
     case struct_name do
       DatabaseEngine.Models.SMS ->
-        correct_options =
-          for {key, val} <- result.options, into: %{}, do: {String.to_atom(key), val}
+        f = fn key, val ->
+          if ["imi_charge_code", "imi_short_code", "imi_service_key", "imi_sms_type"]
+             |> Enum.member?(key) do
+            {String.to_atom(key), val}
+          else
+            {key, val}
+          end
+        end
+
+        correct_options = for {key, val} <- result.options, into: %{}, do: f.(key, val)
 
         correct_options =
           case correct_options[:imi_sms_type] do
