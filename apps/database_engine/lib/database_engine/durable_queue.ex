@@ -79,6 +79,37 @@ defmodule DatabaseEngine.DurableQueue do
     end
   end
 
+  def get_partitions_from_kafka(topic_name) do
+    KafkaEx.metadata()
+    |> Map.get(:topic_metadatas)
+    |> Enum.filter(fn x -> x.topic == topic_name end)
+    |> Enum.flat_map(fn k -> k.partition_metadatas end)
+  end
+
+  def get_partitions_of_topic(topic_name) do
+    key = "durable_queue_partitions_of_" <> topic_name
+
+    from_kafka = fn ->
+      p = get_partitions_from_kafka(topic_name)
+      v = {Utilities.now(), p}
+      DatabaseEngine.Interface.KV.set(key, v)
+      p
+    end
+
+    partitions =
+      case DatabaseEngine.Interface.KV.get(key) do
+        nil ->
+          from_kafka.()
+
+        {time, partiotions} ->
+          if time + 300_000 > Utilities.now() do
+            partiotions
+          else
+            from_kafka.()
+          end
+      end
+  end
+
   @spec enqueue(String.t(), any) :: :ok | :nok
   def enqueue(topic_name, object) do
     Logging.debug("Called with parameters: topic_name: #{topic_name} object: ~p", [object])
@@ -87,10 +118,7 @@ defmodule DatabaseEngine.DurableQueue do
     Logging.debug("calculating kafka topic partitions ...")
 
     partitions =
-      KafkaEx.metadata()
-      |> Map.get(:topic_metadatas)
-      |> Enum.filter(fn x -> x.topic == topic_name end)
-      |> Enum.flat_map(fn k -> k.partition_metadatas end)
+      get_partitions_of_topic(topic_name)
       |> Enum.map(fn x -> x.partition_id end)
       |> Enum.shuffle()
 
