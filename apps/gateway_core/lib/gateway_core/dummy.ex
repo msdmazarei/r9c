@@ -1,3 +1,30 @@
+defmodule GatewayCore.Inputs.Dummy do
+  @gateway_config Application.get_env(:gateway_core, Red9Cobra.DUMMY)
+  @ingress_q @gateway_config[:ingress_sms_Q]
+
+  require Logger
+  require Utilities.Logging
+  alias Utilities.Logging
+  require DatabaseEngine.DurableQueue
+
+  def ingress(sms = %DatabaseEngine.Models.SMS{options: options}) do
+    sms_to_push = %DatabaseEngine.Models.SMS{sms | options: Map.put(options, "gateway", "DUMMY")}
+    DatabaseEngine.DurableQueue.enqueue(@ingress_q, sms_to_push)
+  end
+
+  def get_sample_sms(sender, receiver, body) do
+    %DatabaseEngine.Models.SMS{
+      sender: sender,
+      receiver: receiver,
+      sms_center: "dummy",
+      sent_epoch: Utilities.now(),
+      received_epoch: Utilities.now(),
+      body: body,
+      id: UUID.uuid1()
+    }
+  end
+end
+
 defmodule GatewayCore.Outputs.Dummy do
   @moduledoc false
 
@@ -9,6 +36,10 @@ defmodule GatewayCore.Outputs.Dummy do
   @gateway_config Application.get_env(:gateway_core, Red9Cobra.DUMMY)
   @crash_p @gateway_config[:crash_probeblity]
   @fail_p @gateway_config[:send_failur_probeblity]
+
+  def nodes_to_run() do
+    @gateway_config[:nodes]
+  end
 
   def gw_init() do
     Logging.debug("Called")
@@ -50,10 +81,10 @@ defmodule GatewayCore.Outputs.Dummy do
         end
 
         if fail_p < @fail_p do
-          Logging.warn("COULD NOT SEND SMS id:~p", [x.id])
+          Logging.warn("COULD NOT SEND SMS id:~p, receiver:~p, body:~p", [x.id, x.receiver,x.body])
           false
         else
-          Logging.info("SEND SMS SUCCESSFULLY id:~p", [x.id])
+          Logging.info("SEND SMS SUCCESSFULLY id:~p receiber:~p, body:~p", [x.id, x.receiver,x.body ])
         end
       end)
 
