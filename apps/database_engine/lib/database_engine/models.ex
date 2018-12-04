@@ -26,6 +26,9 @@ defmodule DatabaseEngine.Models.SMS do
             #    "irmtn_service_id" : service id
             #    "irmtn_spid": spid
             #    "irmtn_sms_type" : "send_sms"
+            # could contains "reply_to_message" key which specifies
+            # the original message that current message is replied
+            # to it
             options: %{},
             internal_callback: nil
 end

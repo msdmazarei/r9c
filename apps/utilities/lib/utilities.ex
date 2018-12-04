@@ -125,4 +125,9 @@ defmodule Utilities do
         ])
     end
   end
+
+  @spec all_user_process_nodes() :: list(Atom.t())
+  def all_user_process_nodes() do
+    all_active_nodes()
+  end
 end
