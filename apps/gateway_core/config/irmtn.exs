@@ -1,6 +1,7 @@
 use Mix.Config
 
 config :gateway_core, Red9Cobra.IRMTN,
+  nodes: [:"n2@s1.kafka.local"],
   http_identifier_header: System.get_env("IRMTN_HTTP_ID_HEADER") || "X-RED9COBRA-ID",
   name: "IRANCELL",
   max_charge_amount_per_day_user: 500,

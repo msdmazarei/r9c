@@ -1,6 +1,7 @@
 use Mix.Config
 
 config :gateway_core, Red9Cobra.IMI,
+  nodes: [:"n2@s1.kafka.local"],
   max_charge_retries: 10,
   http_identifier_header: System.get_env("IMI_HTTP_ID_HEADER") || "X-RED9COBRA-ID",
   name: "IMI",
