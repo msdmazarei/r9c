@@ -14,6 +14,7 @@ defmodule GatewayCore.Outputs.Red9CobraSimpleOutGW do
   @callback send_otp_list([DatabaseEngine.Models.OTP.VAS], any()) :: {any(), list(boolean())}
   @callback gw_queue_list() :: [in_Q: String.t(), success_Q: String.t(), fail_Q: String.t()]
   @callback gw_init() :: any
+  @callback nodes_to_run() :: list(String.t())
 
   defmacro __using__(_ \\ []) do
     #    use KafkaEx.GenConsumer
@@ -129,10 +130,21 @@ defmodule GatewayCore.Outputs.Red9CobraSimpleOutGW do
         end
       end
 
-      @spec start() :: {:ok, pid()} | {:nok, :no_in_Q_defined}
+      def start_link() do
+      end
+
+      @spec start() :: {:ok, pid()} | {:nok, :no_in_Q_defined} | {:nok, :this_is_not_target_node}
+
       def start() do
-        queues = gw_queue_list()
-        start(queues[:in_Q], nil)
+        case nodes_to_run() |> Enum.member?(node()) do
+          true ->
+            queues = gw_queue_list()
+            start(queues[:in_Q], nil)
+
+          false ->
+            Logging.warn("Dont Start ~p On ~p, see configuration", [__MODULE__, node()])
+            {:nok, :this_is_not_target_node}
+        end
       end
 
       @spec start(String.t()) :: {:ok, pid()} | {:nok, :no_in_Q_defined}

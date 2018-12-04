@@ -9,6 +9,9 @@ defmodule GatewayCore.Outputs.IrMtn do
 
   use GatewayCore.Outputs.Red9CobraSimpleOutGW
   # require IEx
+  def nodes_to_run() do
+    @gateway_config[:nodes]
+  end
 
   def gw_init() do
     Logging.debug("Called")
