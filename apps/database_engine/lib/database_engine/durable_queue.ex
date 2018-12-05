@@ -93,7 +93,12 @@ defmodule DatabaseEngine.DurableQueue do
       p = get_partitions_from_kafka(topic_name)
       v = {Utilities.now(), p}
       DatabaseEngine.Interface.KV.set(key, v)
-      p
+
+      if p == nil do
+        []
+      else
+        p
+      end
     end
 
     partitions =
