@@ -19,6 +19,9 @@ defmodule GatewayCore.Utils.Helper do
         "irmtn" ->
           GatewayCore.Outputs.IRMTN.SMS
 
+        "gsm" ->
+          GatewayCore.Drivers.GsmModemDriver.Output
+
         _ ->
           Logging.warn("UNKOWN GATEWAY FOR SMS RETURNS. sms:~p", [message])
           UNKOWN_GATEWAY
