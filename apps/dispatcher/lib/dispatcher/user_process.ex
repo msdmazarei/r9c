@@ -10,7 +10,7 @@ defmodule Dispatcher.Process.VAS.UserProcess do
 
   use GenServer
 
-  @wait_to_new_message_timeout_to_hibernate 60_000
+  @wait_to_new_message_timeout_to_hibernate 300_000
   @wait_to_new_message_timeout_to_terminate 600_000
   @check_last_arrived_message_time :check_last_arrived_message_time
 
@@ -19,6 +19,7 @@ defmodule Dispatcher.Process.VAS.UserProcess do
       defstruct(
         cell_no: nil,
         last_arrived_message_time: nil,
+        last_10_processed_messages: [],
         queues: %{
           success_Q: "user_process_success_Q",
           fail_Q: "user_process_fail_Q",
@@ -115,6 +116,19 @@ defmodule Dispatcher.Process.VAS.UserProcess do
     send_to_queue(cell_no, result, sms, queue_name)
   end
 
+  def update_last_10_processed_messages(state, sms) do
+    %State{
+      state
+      | last_10_processed_messages:
+          if state.last_10_processed_messages |> length < 10 do
+            state.last_10_processed_messages ++ [sms.id]
+          else
+            (state.last_10_processed_messages
+             |> Enum.slice(1, length(state.last_10_processed_messages) - 1)) ++ [sms.id]
+          end
+    }
+  end
+
   def handle_call(
         {:ingress, sms = %DatabaseEngine.Models.SMS{sender: cell_no, receiver: service_no}},
         _from,
@@ -122,21 +136,36 @@ defmodule Dispatcher.Process.VAS.UserProcess do
       ) do
     Logging.debug("ingress sms :~p arrived", [sms])
     Logging.debug("~p get service definition for ~p", [cell_no, service_no])
-    script = get_service_script(sms, state)
 
-    send_to_queue(
-      Dispatcher.Process.VAS.UserProcess.Script.run_script(
-        script,
-        sms,
-        state,
-        state.cel_script_limits.run_timeout
-      ),
-      sms,
-      state
-    )
+    rtn =
+      if state.last_10_processed_messages |> Enum.member?(sms.id) do
+        Logging.debug("message: ~p already processed.", [sms.id])
+        {:reply, :ok, state}
+      else
+        script = get_service_script(sms, state)
 
-    state = %State{state | last_arrived_message_time: Utilities.now()}
-    {:reply, :ok, state}
+        send_to_queue(
+          Dispatcher.Process.VAS.UserProcess.Script.run_script(
+            script,
+            sms,
+            state,
+            state.cel_script_limits.run_timeout
+          ),
+          sms,
+          state
+        )
+
+        state = %State{
+          state
+          | last_arrived_message_time: Utilities.now()
+        }
+
+        state = update_last_10_processed_messages(state, sms)
+
+        {:reply, :ok, state}
+      end
+
+    rtn
   end
 
   @compile {:inline, get_script_run_timeout: 2}
@@ -150,8 +179,12 @@ defmodule Dispatcher.Process.VAS.UserProcess do
       print("hello world")
       print("message sender is: ",cel.incoming_message.sender)
       cel.log("debug","hello, this is a kafka enqueue call for script")
-      jafar = 1 / 0
-      print ("jafar = ", jafar)
+      sms = cel.incoming_message
+      if sms.body == "salam" then
+        cel.reply("aleyk salam")
+      else
+        cel.reply("Unknown")
+      end
     """
   end
 
