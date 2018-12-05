@@ -31,10 +31,13 @@ use Mix.Config
 import_config "imi.exs"
 import_config "irmtn.exs"
 import_config "dummy.exs"
-
-config :gateway_core,
-  gsm_gateway: [
-    q_in: "gsm_input",
-    q_out: "gsm_output"
-  ],
-  modems: [{"127.0.0.1", 3285}]
+import_config "gsm.exs"
+#
+# config :gateway_core,
+#  gsm_gateway: [
+#  "n1@s1.kafka.local": [
+#    q_in: "gsm_input",
+#    q_out: "gsm_output",
+#    modems: [{"127.0.0.1", 3285}]
+#  ]
+#  ]
