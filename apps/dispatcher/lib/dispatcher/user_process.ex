@@ -6,31 +6,37 @@ defmodule Dispatcher.Process.VAS.UserProcess do
   require Utilities
 
   alias Utilities.Logging
-  alias :luerl, as: LUA
+  #  alias :luerl, as: LUA
 
   use GenServer
 
-  @wait_to_new_message_timeout_to_hibernate 300_000
-  @wait_to_new_message_timeout_to_terminate 600_000
+  @module_config Application.get_env(:dispatcher, __MODULE__)
+  @wait_to_new_message_timeout_to_hibernate @module_config[
+                                              :wait_to_new_message_timeout_to_hibernate
+                                            ]
+  @wait_to_new_message_timeout_to_terminate @module_config[
+                                              :wait_to_new_message_timeout_to_terminate
+                                            ]
+
   @check_last_arrived_message_time :check_last_arrived_message_time
 
   defmodule State do
-    {
-      defstruct(
-        cell_no: nil,
-        last_arrived_message_time: nil,
-        last_10_processed_messages: [],
-        queues: %{
-          success_Q: "user_process_success_Q",
-          fail_Q: "user_process_fail_Q",
-          cel_logging_Q: "user_process_logging_Q"
-        },
-        cel_script_limits: %{
-          run_timeout: 20_000,
-          http_call_limit: 20
-        }
-      )
-    }
+    @module_config Application.get_env(:dispatcher, Dispatcher.Process.VAS.UserProcess)
+
+    defstruct(
+      cell_no: nil,
+      last_arrived_message_time: nil,
+      last_10_processed_messages: [],
+      queues: %{
+        success_Q: @module_config[:success_Q],
+        fail_Q: @module_config[:fail_Q],
+        cel_logging_Q: @module_config[:cel_logging_Q]
+      },
+      cel_script_limits: %{
+        run_timeout: @module_config[:cel_script_limitation][:run_timeout],
+        http_call_limit: @module_config[:cel_script_limitation][:http_call_limit]
+      }
+    )
   end
 
   def start_link(state, opts) do
@@ -57,20 +63,6 @@ defmodule Dispatcher.Process.VAS.UserProcess do
     #    {:ok, %{"last_arrived_message_time" => Utilities.now(), "cell_no" => cell_no}}
   end
 
-  def handle_call(:alive, _, state) do
-    {:reply, true, state}
-  end
-
-  def handle_call(
-        {:echo, msg},
-        _,
-        state = %State{last_arrived_message_time: last_arrived_message_time, cell_no: cell_no}
-      ) do
-    Logging.debug("~p Called, Echo Message:~p", [cell_no, msg])
-    state = %State{state | last_arrived_message_time: Utilities.now()}
-    {:reply, msg, state}
-  end
-
   defp send_to_queue(cell_no, result, sms, queue_name) do
     case DatabaseEngine.DurableQueue.enqueue(queue_name, %{
            "sms" => sms,
@@ -89,7 +81,7 @@ defmodule Dispatcher.Process.VAS.UserProcess do
   defp send_to_queue(
          {:return, result},
          sms,
-         state = %State{queues: %{success_Q: queue_name}, cell_no: cell_no}
+         %State{queues: %{success_Q: queue_name}, cell_no: cell_no}
        ) do
     Logging.debug("Called - :success , result is: ~p", [result])
     send_to_queue(cell_no, result, sms, queue_name)
@@ -98,7 +90,7 @@ defmodule Dispatcher.Process.VAS.UserProcess do
   defp send_to_queue(
          {:error, result},
          sms,
-         state = %State{queues: %{fail_Q: queue_name}, cell_no: cell_no}
+         %State{queues: %{fail_Q: queue_name}, cell_no: cell_no}
        ) do
     Logging.debug("Called - :error, result is:~p", [result])
 
@@ -127,6 +119,20 @@ defmodule Dispatcher.Process.VAS.UserProcess do
              |> Enum.slice(1, length(state.last_10_processed_messages) - 1)) ++ [sms.id]
           end
     }
+  end
+
+  def handle_call(:alive, _, state) do
+    {:reply, true, state}
+  end
+
+  def handle_call(
+        {:echo, msg},
+        _,
+        state = %State{cell_no: cell_no}
+      ) do
+    Logging.debug("~p Called, Echo Message:~p", [cell_no, msg])
+    state = %State{state | last_arrived_message_time: Utilities.now()}
+    {:reply, msg, state}
   end
 
   def handle_call(
@@ -168,13 +174,23 @@ defmodule Dispatcher.Process.VAS.UserProcess do
     rtn
   end
 
+  def handle_call(
+        msg,
+        _,
+        state = %State{cell_no: cell_no}
+      ) do
+    Logging.debug("~p: got msg:~p but have no plan to do what. ignore it", [cell_no, msg])
+    state = %State{state | last_arrived_message_time: Utilities.now()}
+    {:reply, :ok, state}
+  end
+
   @compile {:inline, get_script_run_timeout: 2}
   defp get_script_run_timeout(_sms, state) do
     state.cel_script_limits.run_timeout
   end
 
   @compile {:inline, get_service_script: 2}
-  defp get_service_script(sms, state) do
+  defp get_service_script(_sms, _state) do
     """
       print("hello world")
       print("message sender is: ",cel.incoming_message.sender)
@@ -188,17 +204,7 @@ defmodule Dispatcher.Process.VAS.UserProcess do
     """
   end
 
-  defp get_service_definition(msg) do
-  end
-
-  def handle_call(
-        msg,
-        _,
-        state = %State{cell_no: cell_no, last_arrived_message_time: last_arrived_message_time}
-      ) do
-    Logging.debug("~p: got msg:~p but have no plan to do what. ignore it", [cell_no, msg])
-    state = %State{state | last_arrived_message_time: Utilities.now()}
-    {:reply, :ok, state}
+  defp get_service_definition(_msg) do
   end
 
   def handle_cast(_msg, state) do
