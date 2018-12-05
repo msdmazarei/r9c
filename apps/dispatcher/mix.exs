@@ -31,7 +31,8 @@ defmodule Dispatcher.MixProject do
        compile: "make && cp src/luerl.app.src ebin/luerl.app"},
       {:utilities, in_umbrella: true},
       {:database_engine, in_umbrella: true},
-      {:networking, in_umbrella: true}
+      {:networking, in_umbrella: true},
+      {:gateway_core, in_umbrella: true}
 
       # {:dep_from_hexpm, "~> 0.3.0"},
       # {:dep_from_git, git: "https://github.com/elixir-lang/my_dep.git", tag: "0.1.0"},

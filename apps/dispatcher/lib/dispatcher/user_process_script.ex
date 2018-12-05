@@ -4,6 +4,7 @@ defmodule Dispatcher.Process.VAS.UserProcess.Script do
   require Logger
   require Utilities.Logging
   require DatabaseEngine.Models.SMS
+  require GatewayCore.Utils.Helper
 
   alias Utilities.Logging
   alias :httpc, as: HTTPC

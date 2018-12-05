@@ -10,12 +10,12 @@ defmodule Dispatcher.Process do
   require Utilities.Logging
   alias Utilities.Logging
 
-  @alive_response_for_UP 1000
-  @maximum_wait_time_for_UP_responses 7000
-  @user_process_timeout 5000
-  @process_creation_timeout 1000
+  @config Application.get_env(:dispatcher, __MODULE__)
+  @alive_response_for_UP @config[:alive_response_for_UP]
+  @maximum_wait_time_for_UP_responses @config[:maximum_wait_time_for_UP_responses]
+  @user_process_timeout @config[:user_process_timeout]
+  @process_creation_timeout @config[:process_creation_timeout]
 
-  @table_name Dispatcher.Process.ProcessModel
   alias :mnesia, as: Mnesia
 
   def get_sample_sms(mobno) do
@@ -161,35 +161,34 @@ defmodule Dispatcher.Process do
     end
   end
 
-  @dispatcher_fail_Q "dispatcher_fail_Q"
+  @dispatcher_fail_Q @config[:dispatcher_fail_Q]
 
   defp send_failed_dispatched_to_kafka(final_result, process_message_tuples) do
     Logging.debug("Called. final result:~p", [final_result])
 
-    to_fail_Q =
-      final_result
-      |> Enum.with_index()
-      |> Enum.map(fn {item, index} ->
-        if item == false do
-          process_message_tuples |> Enum.at(index)
-        else
-          nil
-        end
-      end)
-      |> Enum.filter(fn x -> x != nil end)
-      |> Enum.map(fn {pname, msg} ->
-        case DatabaseEngine.DurableQueue.enqueue(@dispatcher_fail_Q, msg) do
-          :nok ->
-            Logging.warn("Problem To Enqueue messages to dispatcher fail Q. for pname:~p", [pname])
+    final_result
+    |> Enum.with_index()
+    |> Enum.map(fn {item, index} ->
+      if item == false do
+        process_message_tuples |> Enum.at(index)
+      else
+        nil
+      end
+    end)
+    |> Enum.filter(fn x -> x != nil end)
+    |> Enum.map(fn {pname, msg} ->
+      case DatabaseEngine.DurableQueue.enqueue(@dispatcher_fail_Q, msg) do
+        :nok ->
+          Logging.warn("Problem To Enqueue messages to dispatcher fail Q. for pname:~p", [pname])
 
-          _ ->
-            Logging.debug("successfully enqueued to dispatcher failed Q, process name :~p", [
-              pname
-            ])
+        _ ->
+          Logging.debug("successfully enqueued to dispatcher failed Q, process name :~p", [
+            pname
+          ])
 
-            :ok
-        end
-      end)
+          :ok
+      end
+    end)
   end
 
   @spec send_message({String.t(), DatabaseEngine.Models.SMS}) :: pid() | boolean()
@@ -246,16 +245,14 @@ defmodule Dispatcher.Process do
     end
   end
 
-  def get_process_model(process_name) do
+  def get_process_model(_process_name) do
   end
 
-  def is_process_alive(
-        process_model = %Dispatcher.Process.ProcessModel{
-          node_address: n,
-          local_pid: pid,
-          name: name
-        }
-      ) do
+  def is_process_alive(%Dispatcher.Process.ProcessModel{
+        node_address: n,
+        local_pid: pid,
+        name: name
+      }) do
     case :rpc.block_call(
            n,
            GenServer,
@@ -282,7 +279,7 @@ defmodule Dispatcher.Process do
     end
   end
 
-  def kill_process(name) do
+  def kill_process(_name) do
   end
 
   def create_process(name, message) do
@@ -299,7 +296,7 @@ defmodule Dispatcher.Process do
     false
   end
 
-  def create_process(name, module, nodes, message) do
+  def create_process(name, module, nodes, _message) do
     Logging.debug("Called With params, name:~p module:~p nodes:~p", [name, module, nodes])
     selected_node = nodes |> Enum.shuffle() |> hd()
 

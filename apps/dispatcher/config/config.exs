@@ -28,9 +28,19 @@ use Mix.Config
 # here (which is why it is important to import them last).
 #
 #     import_config "#{Mix.env()}.exs"
+import_config "user_process.exs"
 
 config :dispatcher,
   input_queues: [
     "n2@s1.kafka.local": ["in_dummy"],
     "n1@s1.kafka.local": ["in_imi", "in_irmtn"]
   ]
+
+config :dispatcher, Dispatcher.Process,
+  # maximum time to wait for aliveness response of process
+  alive_response_for_UP: System.get_env("DISPATCHER_UP_ALIVE_TIMEOUT") || 1_000,
+  # maximum time to wait to get request process resoinse
+  maximum_wait_time_for_UP_responses: System.get_env("DISPATCHER_UP_RESP_MAX_TIMEOUT") || 7_000,
+  user_process_timeout: System.get_env("DISPATCHER_UP_LOCAL_CALL_TIMEOUT") || 5_000,
+  process_creation_timeout: System.get_env("DISPATCHER_UP_CREATION_TIMEOUT") || 1_000,
+  dispatcher_fail_Q: System.get_env("DISPATCHER_FAIL_Q") || "dispatcher_fail_Q"

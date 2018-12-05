@@ -184,10 +184,11 @@ defmodule Dispatcher.Process.VAS.UserProcess do
     {:reply, :ok, state}
   end
 
-  @compile {:inline, get_script_run_timeout: 2}
-  defp get_script_run_timeout(_sms, state) do
-    state.cel_script_limits.run_timeout
-  end
+  #
+  #  @compile {:inline, get_script_run_timeout: 2}
+  #  defp get_script_run_timeout(_sms, state) do
+  #    state.cel_script_limits.run_timeout
+  #  end
 
   @compile {:inline, get_service_script: 2}
   defp get_service_script(_sms, _state) do
@@ -204,8 +205,8 @@ defmodule Dispatcher.Process.VAS.UserProcess do
     """
   end
 
-  defp get_service_definition(_msg) do
-  end
+  #  defp get_service_definition(_msg) do
+  #  end
 
   def handle_cast(_msg, state) do
     {:noreply, state}
