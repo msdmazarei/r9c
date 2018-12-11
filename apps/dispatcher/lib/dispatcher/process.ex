@@ -59,9 +59,15 @@ defmodule Dispatcher.Process do
   end
 
   def send_messages(messages) do
-    process_names = messages |> Enum.map(&get_process_name_by_message/1)
+    process_names =
+      messages
+      |> Enum.map(&get_process_name_by_message/1)
+
     process_message_tuples = Enum.zip(process_names, messages)
-    results = process_message_tuples |> Enum.map(&send_message/1)
+
+    results =
+      process_message_tuples
+      |> Enum.map(&send_message/1)
 
     wait_to_response_or_timeout(
       Utilities.now(),
@@ -78,12 +84,94 @@ defmodule Dispatcher.Process do
     end
   end
 
+  def could_send_to_process_again(msg = %DatabaseEngine.Models.SMS{options: options}) do
+    Logging.debug("Called")
+    key_time = "dispatcher_last_send_to_process_time"
+    key_try_count = "dispatcher_total_send_try_count"
+    new_options = options || %{}
+
+    time = new_options[key_time] || 0
+    try_count = new_options[key_try_count] || 0
+    total_try = 4
+    delay_time = @maximum_wait_time_for_UP_responses / total_try
+    Logging.debug("time:~p try_count:~p", [time, try_count])
+
+    if time > Utilities.now() or try_count > total_try do
+      Logging.debug("return nil")
+      nil
+    else
+      new_options =
+        new_options
+        |> Map.put(key_time, Utilities.now() + 1000)
+        |> Map.put(key_try_count, try_count + 1)
+
+      r = %DatabaseEngine.Models.SMS{msg | options: new_options}
+      Logging.debug("returns:~p", [r])
+      r
+    end
+  end
+
+  def check_user_process_result(process_result, process_message_tuple = {pname, msg})
+      when is_pid(process_result) do
+    Logging.debug("PARSE PID X TO FIND OUT RESULT:~p", [process_result])
+    x = process_result
+
+    case :rpc.nb_yield(x, 0) do
+      :timeout ->
+        {x, process_message_tuple}
+
+      {:value, v} ->
+        case v do
+          r when is_boolean(r) ->
+            {r, process_message_tuple}
+
+          {:badrpc, {:EXIT, {:noproc, _}}} ->
+            Logging.debug("EXITED PROCESS!!!")
+
+            Logging.debug("there is no process for pname:~p", [pname])
+
+            {:atomic, _} =
+              Mnesia.transaction(fn ->
+                DatabaseEngine.Interface.Process.del(pname)
+                #                            Mnesia.dirty_delete({@table_name, pname})
+              end)
+
+            new_message = could_send_to_process_again(msg)
+
+            case new_message do
+              nil ->
+                Logging.debug("should wait beacuse it is soon to send message again")
+                {x, process_message_tuple}
+
+              _ ->
+                Logging.debug("send message again, new_message options:~p", [new_message.options])
+                new_pid = send_message({pname, new_message})
+                {new_pid, {pname, new_message}}
+            end
+
+          _ ->
+            Logging.warn(
+              "RPC VALUE is :~p (we expect boolean or badrpc. we consider it as false)",
+              [v]
+            )
+
+            {false, process_message_tuple}
+        end
+    end
+  end
+
+  def check_user_process_result(process_result, process_message_tuple) do
+    Logging.debug("process_result is :~p", [process_result])
+    {process_result, process_message_tuple}
+  end
+
   @spec wait_to_response_or_timeout(integer(), list(), list()) :: list(boolean())
   def wait_to_response_or_timeout(start_time, final_result, process_message_tuples) do
     Logging.debug("Called With Params, start_time:~p final-result:~p", [start_time, final_result])
 
     all_of_items_are_boolean =
-      final_result |> Enum.reduce(true, fn x, acc -> acc && is_boolean(x) end)
+      final_result
+      |> Enum.reduce(true, fn x, acc -> acc && is_boolean(x) end)
 
     case all_of_items_are_boolean do
       true ->
@@ -92,55 +180,25 @@ defmodule Dispatcher.Process do
 
       false ->
         if Utilities.now() < start_time + @maximum_wait_time_for_UP_responses do
-          new_results =
+          new_ =
             final_result
             |> Enum.map(&ok_nok_to_boolean/1)
             |> Enum.with_index()
             |> Enum.map(fn {x, index} ->
-              if is_boolean(x) do
-                x
-              else
-                if is_pid(x) do
-                  Logging.debug("PARSE PID X TO FIND OUT RESULT:~p", [x])
-
-                  case :rpc.nb_yield(x, 0) do
-                    :timeout ->
-                      x
-
-                    {:value, v} ->
-                      case v do
-                        r when is_boolean(r) ->
-                          r
-
-                        {:badrpc, {:EXIT, {:noproc, _}}} ->
-                          Logging.debug("EXITED PROCESS!!!")
-                          {pname, msg} = process_message_tuples |> Enum.at(index)
-                          Logging.debug("there is no process for pname:~p", [pname])
-
-                          Mnesia.transaction(fn ->
-                            DatabaseEngine.Interface.Process.del(pname)
-                            #                            Mnesia.dirty_delete({@table_name, pname})
-                          end)
-
-                          send_message({pname, msg})
-
-                        _ ->
-                          Logging.debug("RPC VALUE is :~p", [v])
-                          v
-                      end
-
-                    other ->
-                      Logging.debug("nb_yeild return OTHER:~p", [other])
-                      other
-                  end
-                else
-                  false
-                end
-              end
+              process_message_tuple = process_message_tuples |> Enum.at(index)
+              check_user_process_result(x, process_message_tuple)
             end)
 
-          Process.sleep(100)
-          wait_to_response_or_timeout(start_time, new_results, process_message_tuples)
+          new_results = new_ |> Enum.map(fn {x, _} -> x end)
+          new_process_message_tuples = new_ |> Enum.map(fn {_, x} -> x end)
+          Process.sleep(500)
+
+          Logging.debug("will call with results:~p process_message_tuple:~p", [
+            new_results,
+            new_process_message_tuples
+          ])
+
+          wait_to_response_or_timeout(start_time, new_results, new_process_message_tuples)
         else
           # timeouted
           final_result =
@@ -170,21 +228,38 @@ defmodule Dispatcher.Process do
     |> Enum.with_index()
     |> Enum.map(fn {item, index} ->
       if item == false do
-        process_message_tuples |> Enum.at(index)
+        process_message_tuples
+        |> Enum.at(index)
       else
         nil
       end
     end)
     |> Enum.filter(fn x -> x != nil end)
     |> Enum.map(fn {pname, msg} ->
+      msg =
+        case msg do
+          %DatabaseEngine.Models.SMS{} ->
+            DatabaseEngine.Models.SMS.Helper.describe_stage(
+              msg,
+              "dispatcher",
+              "failed_to_dispatch"
+            )
+
+          _ ->
+            msg
+        end
+
       case DatabaseEngine.DurableQueue.enqueue(@dispatcher_fail_Q, msg) do
         :nok ->
           Logging.warn("Problem To Enqueue messages to dispatcher fail Q. for pname:~p", [pname])
 
         _ ->
-          Logging.debug("successfully enqueued to dispatcher failed Q, process name :~p", [
-            pname
-          ])
+          Logging.debug(
+            "successfully enqueued to dispatcher failed Q, process name :~p",
+            [
+              pname
+            ]
+          )
 
           :ok
       end
@@ -264,16 +339,20 @@ defmodule Dispatcher.Process do
         true
 
       other ->
-        Logging.debug("did not get proper response from remote process. It;s Response: ~p", [
-          other
-        ])
+        Logging.debug(
+          "did not get proper response from remote process. It;s Response: ~p",
+          [
+            other
+          ]
+        )
 
-        Mnesia.transaction(fn ->
-          Logging.debug("deleting entry in mnesia")
-          r = DatabaseEngine.Interface.Process.del(name)
-          #          r = Mnesia.delete({@table_name, name})
-          Logging.debug("delete status:~p", [r])
-        end)
+        {:atomic, _} =
+          Mnesia.transaction(fn ->
+            Logging.debug("deleting entry in mnesia")
+            r = DatabaseEngine.Interface.Process.del(name)
+            #          r = Mnesia.delete({@table_name, name})
+            Logging.debug("delete status:~p", [r])
+          end)
 
         false
     end
@@ -298,7 +377,11 @@ defmodule Dispatcher.Process do
 
   def create_process(name, module, nodes, _message) do
     Logging.debug("Called With params, name:~p module:~p nodes:~p", [name, module, nodes])
-    selected_node = nodes |> Enum.shuffle() |> hd()
+
+    selected_node =
+      nodes
+      |> Enum.shuffle()
+      |> hd()
 
     case :rpc.block_call(
            selected_node,
