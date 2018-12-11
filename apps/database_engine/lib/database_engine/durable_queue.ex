@@ -128,12 +128,15 @@ defmodule DatabaseEngine.DurableQueue do
       |> Enum.shuffle()
 
     case partitions do
-      l when is_list(l) ->
+      l when is_list(l) and length(l) > 0 ->
         Logging.debug("calulated partitions for topic: #{topic_name} are: ~p", [l])
         enqueue(topic_name, hd(l), object)
 
       [] ->
-        Logging.debug("no partition found for topic: #{topic_name}, may be there is no topic ")
+        Logging.warn(
+          "no partition found for topic: #{topic_name}, may be there is no topic. data to enqueue: ~p",
+          [object]
+        )
 
         :ok
     end
