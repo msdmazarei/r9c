@@ -29,9 +29,26 @@ defmodule DatabaseEngine.Models.SMS do
             # could contains "reply_to_message" key which specifies
             # the original message that current message is replied
             # to it
-            # could contains "gateway" which specify gateway like: "DUMMY","IMI","IRMTN"
+            # could contain "gateway" which specify gateway like: "DUMMY","IMI","IRMTN"
+            # could contain __module_name
+            # could contain __state_desc
+            # could contain __state_time
             options: %{},
             internal_callback: nil
+end
+
+defmodule DatabaseEngine.Models.SMS.Helper do
+  def describe_stage(sms, module_name, state_descrition) do
+    o = sms.options || %{}
+
+    o =
+      o
+      |> Map.put("__module_name", module_name)
+      |> Map.put("__state_desc", state_descrition)
+      |> Map.put("__state_time", Utilities.now())
+
+    %DatabaseEngine.Models.SMS{sms | options: o}
+  end
 end
 
 defmodule DatabaseEngine.Models.OTP.VAS.IMI_GW_OPTS do
