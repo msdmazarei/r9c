@@ -65,6 +65,8 @@ defmodule Dispatcher.Process.VAS.UserProcess do
 
   defp send_to_queue(cell_no, result, sms, queue_name) do
     case DatabaseEngine.DurableQueue.enqueue(queue_name, %{
+    "type"=> "script_result",
+    "module" => __MODULE__,
            "sms" => sms,
            "script_result" => result,
            "cell_no" => cell_no,
@@ -168,7 +170,7 @@ defmodule Dispatcher.Process.VAS.UserProcess do
 
         state = update_last_10_processed_messages(state, sms)
 
-        {:reply, :ok, state}
+        {:reply, true, state}
       end
 
     rtn
