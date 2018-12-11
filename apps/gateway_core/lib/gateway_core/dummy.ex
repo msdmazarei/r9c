@@ -6,9 +6,14 @@ defmodule GatewayCore.Inputs.Dummy do
   require Utilities.Logging
   alias Utilities.Logging
   require DatabaseEngine.DurableQueue
+  require DatabaseEngine.Models.SMS.Helper
 
   def ingress(sms = %DatabaseEngine.Models.SMS{options: options}) do
     sms_to_push = %DatabaseEngine.Models.SMS{sms | options: Map.put(options, "gateway", "DUMMY")}
+
+    sms_to_push =
+      DatabaseEngine.Models.SMS.Helper.describe_stage(sms_to_push, __MODULE__, "ingress")
+
     DatabaseEngine.DurableQueue.enqueue(@ingress_q, sms_to_push)
   end
 
@@ -81,10 +86,19 @@ defmodule GatewayCore.Outputs.Dummy do
         end
 
         if fail_p < @fail_p do
-          Logging.warn("COULD NOT SEND SMS id:~p, receiver:~p, body:~p", [x.id, x.receiver,x.body])
+          Logging.warn("COULD NOT SEND SMS id:~p, receiver:~p, body:~p", [
+            x.id,
+            x.receiver,
+            x.body
+          ])
+
           false
         else
-          Logging.info("SEND SMS SUCCESSFULLY id:~p receiber:~p, body:~p", [x.id, x.receiver,x.body ])
+          Logging.info("SEND SMS SUCCESSFULLY id:~p receiber:~p, body:~p", [
+            x.id,
+            x.receiver,
+            x.body
+          ])
         end
       end)
 

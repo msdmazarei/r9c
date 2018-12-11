@@ -3,6 +3,7 @@ defmodule GatewayCore.Outputs.Red9CobraSimpleOutGW do
   require Logger
   require Utilities.Logging
   require DatabaseEngine.DurableQueue
+  require DatabaseEngine.Models.SMS.Helper
 
   alias Utilities.Logging
   alias DatabaseEngine.DurableQueue
@@ -92,7 +93,7 @@ defmodule GatewayCore.Outputs.Red9CobraSimpleOutGW do
         Logging.debug("internal_state:~p otp_result:~p", [internal_state, otp_send_result])
         enqueue_items(otp_list, otp_send_result, state)
         Logging.debug("internal_state:~p  charge_result:~p", [internal_state, charge_send_result])
-        enqueue_items(otp_list, charge_send_result, state)
+        enqueue_items(charge_list, charge_send_result, state)
 
         {
           :async_commit,
@@ -169,6 +170,11 @@ defmodule GatewayCore.Outputs.Red9CobraSimpleOutGW do
       def send(sms) do
         queues = gw_queue_list()
         in_Q = queues[:in_Q]
+        sms = case sms do
+          %DatabaseEngine.Models.SMS{} ->
+          DatabaseEngine.Models.SMS.Helper.describe_stage(sms,__MODULE__,"queue_to_send")
+          _ -> sms
+        end
         DatabaseEngine.DurableQueue.enqueue(in_Q, sms)
       end
 
@@ -185,6 +191,19 @@ defmodule GatewayCore.Outputs.Red9CobraSimpleOutGW do
 
           if :lists.nth(i, send_results) == true do
             if success_Q != nil do
+              item =
+                case item do
+                  %DatabaseEngine.Models.SMS{} ->
+                    DatabaseEngine.Models.SMS.Helper.describe_stage(
+                      item,
+                      __MODULE__,
+                      "successfully_sent"
+                    )
+
+                  _ ->
+                    item
+                end
+
               case DatabaseEngine.DurableQueue.enqueue(success_Q, item) do
                 :nok ->
                   Logging.warn("Could not enqueue id:~p into success_Q:~p", [
@@ -200,6 +219,19 @@ defmodule GatewayCore.Outputs.Red9CobraSimpleOutGW do
             end
           else
             if fail_Q != nil do
+              item =
+                case item do
+                  %DatabaseEngine.Models.SMS{} ->
+                    DatabaseEngine.Models.SMS.Helper.describe_stage(
+                      item,
+                      __MODULE__,
+                      "failed_to_send"
+                    )
+
+                  _ ->
+                    item
+                end
+
               case DatabaseEngine.DurableQueue.enqueue(fail_Q, item) do
                 :nok ->
                   Logging.warn("Could not enqueue sms.id;~p into fail_Q:~p", [item.id, fail_Q])
