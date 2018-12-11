@@ -118,7 +118,9 @@ defmodule Dispatcher.Process.VAS.UserProcess.Script do
           "type" => "cel.logging",
           "pid_name" => ups.cell_no,
           "sms_sender" => get_orig_message(state).sender,
-          "time" => Utilities.now()
+          "time" => Utilities.now(),
+        "module" => __MODULE__,
+        "sms_id"=> get_orig_message(state).id
         }
 
         Logging.debug("data_to_enqueue:~p", [data_to_enqueue])
