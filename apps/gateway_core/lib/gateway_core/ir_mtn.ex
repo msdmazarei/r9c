@@ -13,6 +13,10 @@ defmodule GatewayCore.Outputs.IrMtn do
     @gateway_config[:nodes]
   end
 
+  def gw_limitations() do
+    @gateway_config[:throttle]
+  end
+
   def gw_init() do
     Logging.debug("Called")
     []

@@ -8,5 +8,6 @@ config :gateway_core, GatewayCore.Drivers.GsmModemDriver.Output,
     fail_Q: System.get_env("GSM_FAIL_Q") || "gsm_fail_q",
     modems: [{"127.0.0.1", 3285}],
     ingress_Q: System.get_env("GSM_INGRESS_Q") || "gsm_ingress",
-    nodes: [:"n1@s1.kafka.local"]
+    nodes: [:"n1@s1.kafka.local"],
+    throttle: [{2, 5_000}, {10, 60_000}]
   ]

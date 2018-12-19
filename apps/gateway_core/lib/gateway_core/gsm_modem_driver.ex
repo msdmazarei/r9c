@@ -6,6 +6,9 @@ defmodule GatewayCore.Drivers.GsmModemDriver.Output do
   @gateway_config Application.get_env(:gateway_core, __MODULE__)[node()]
 
   use GatewayCore.Outputs.Red9CobraSimpleOutGW
+  def gw_limitations() do
+    @gateway_config[:throttle]
+  end
   # require IEx
   def nodes_to_run() do
     Logging.debug("Called, gateway_config:~p", [@gateway_config])
@@ -115,11 +118,16 @@ defmodule GatewayCore.Drivers.GsmModemDriver.Input do
     }
 
     Logging.debug("SMS to enqueu into q(~p) :~p ", [q_in, sms])
-    sms = case sms do
-      %DatabaseEngine.Models.SMS{} ->
-      DatabaseEngine.Models.SMS.Helper.describe_stage(sms,__MODULE__,"ingress")
-      _ -> sms
-    end
+
+    sms =
+      case sms do
+        %DatabaseEngine.Models.SMS{} ->
+          DatabaseEngine.Models.SMS.Helper.describe_stage(sms, __MODULE__, "ingress")
+
+        _ ->
+          sms
+      end
+
     DatabaseEngine.DurableQueue.enqueue(q_in, sms)
   end
 

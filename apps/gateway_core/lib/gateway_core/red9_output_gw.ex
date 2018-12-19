@@ -10,6 +10,7 @@ defmodule GatewayCore.Outputs.Red9CobraSimpleOutGW do
   alias DatabaseEngine.DurableQueue
   alias KafkaEx.Protocol.Fetch.Message
   alias DatabaseEngine.Models.SMS
+  alias GatewayCore.Utils.Throttle
 
   @callback send_charge_list([DatabaseEnginge.Models.Charge.VAS], any()) ::
               {any(), list(boolean())}
@@ -18,6 +19,7 @@ defmodule GatewayCore.Outputs.Red9CobraSimpleOutGW do
   @callback gw_queue_list() :: [in_Q: String.t(), success_Q: String.t(), fail_Q: String.t()]
   @callback gw_init() :: any
   @callback nodes_to_run() :: list(String.t())
+  @callback gw_limitations(any()) :: list({integer, integer})
 
   defmacro __using__(_ \\ []) do
     #    use KafkaEx.GenConsumer
@@ -35,7 +37,23 @@ defmodule GatewayCore.Outputs.Red9CobraSimpleOutGW do
                   internal_state: %{},
                   consumer_sup_pid: nil,
                   circular_buffer: Utilities.Circular.new_circular_buffer(1000),
-                  failed_cb: Utilities.Circular.new_circular_buffer(1000)
+                  failed_cb: Utilities.Circular.new_circular_buffer(1000),
+                  limitation: []
+      end
+
+      def enforce_throttle( l) when l in [nil, []] do
+        true
+      end
+
+      def enforce_throttle(limits) do
+        name = __MODULE__ |> to_string()
+
+        if Throttle.multiple_is_allowed(name, limits) do
+          true
+        else
+          Process.sleep(100)
+          enforce_throttle(limits)
+        end
       end
 
       def init(topic, partition) do
@@ -51,7 +69,8 @@ defmodule GatewayCore.Outputs.Red9CobraSimpleOutGW do
             in_Q: queues[:in_Q],
             success_Q: queues[:success_Q],
             fail_Q: queues[:fail_Q],
-            internal_state: gw_init()
+            internal_state: gw_init(),
+            limitation: gw_limitations()
           }
         }
 
@@ -65,12 +84,11 @@ defmodule GatewayCore.Outputs.Red9CobraSimpleOutGW do
       @retry_delay 1000
       @a_second_to_sleep 1000
 
-
       def message_time_is_ok_to_send_right_now(
             message = %{options: %{@time_to_do_key => time_to_do}},
             state
           ) do
-#        Logging.debug("Called. message:~p", [message])
+        #        Logging.debug("Called. message:~p", [message])
 
         rtn =
           if Utilities.now() > time_to_do do
@@ -79,12 +97,12 @@ defmodule GatewayCore.Outputs.Red9CobraSimpleOutGW do
             false
           end
 
-#        Logging.debug("returns:~p", [rtn])
+        #        Logging.debug("returns:~p", [rtn])
         rtn
       end
 
       def message_time_is_ok_to_send_right_now(_, _) do
-#        Logging.debug("Not Matched and returns always true, args:~p",[m])
+        #        Logging.debug("Not Matched and returns always true, args:~p",[m])
         true
       end
 
@@ -142,7 +160,7 @@ defmodule GatewayCore.Outputs.Red9CobraSimpleOutGW do
           |> Enum.filter(fn x -> !drop_message_func.(x) end)
           |> Enum.filter(fn x -> !is_failed_recently.(x) end)
 
-          Logging.debug("true messages count:~p",[true_messages|>length()])
+        Logging.debug("true messages count:~p", [true_messages |> length()])
 
         drop_messages
         |> Enum.map(fn x ->
@@ -157,9 +175,9 @@ defmodule GatewayCore.Outputs.Red9CobraSimpleOutGW do
         true_messages
       end
 
-      def try_fails([],[],_) do
-
+      def try_fails([], [], _) do
       end
+
       def try_fails(messages, statuses, state = %State{topic: topic, partition: partition}) do
         Logging.debug("called message_status:~p", [statuses])
 
@@ -221,7 +239,7 @@ defmodule GatewayCore.Outputs.Red9CobraSimpleOutGW do
       @compile {:inline, get_try_count_time: 1}
       def get_try_count_time(message = %SMS{}) do
         options = message.options || %{}
-        {options[@retry_count] || -1, options[@time_to_do_key] || -1 }
+        {options[@retry_count] || -1, options[@time_to_do_key] || -1}
       end
 
       def get_try_count_time(_) do
@@ -274,19 +292,24 @@ defmodule GatewayCore.Outputs.Red9CobraSimpleOutGW do
           failed_messages
           |> Enum.reduce(failed_cb, fn item, acc ->
             item_id = get_message_id(item)
-            {try_count,try_time} = get_try_count_time(item)
-            {old_count,old_time} = case  Utilities.Circular.get_value(acc,item_id) do
-              nil -> {-1,-2}
-                     {old_count,old_time} -> {old_count,old_time}
-            end
-            try_count = Enum.max([try_count,old_count])
-            try_time = Enum.max([old_time,try_time])
+            {try_count, try_time} = get_try_count_time(item)
 
-            b=Utilities.Circular.append_to_circular_buffer(acc, item_id, {try_count,try_time})
-#            Logging.debug("********** AFTR APPENDING:~p",[ b |> Utilities.Circular.get_dict()])
+            {old_count, old_time} =
+              case Utilities.Circular.get_value(acc, item_id) do
+                nil -> {-1, -2}
+                {old_count, old_time} -> {old_count, old_time}
+              end
+
+            try_count = Enum.max([try_count, old_count])
+            try_time = Enum.max([old_time, try_time])
+
+            b = Utilities.Circular.append_to_circular_buffer(acc, item_id, {try_count, try_time})
+
+            #            Logging.debug("********** AFTR APPENDING:~p",[ b |> Utilities.Circular.get_dict()])
             b
           end)
-#          Logging.debug("old_faild_dict:~p failed_dict:~p",[failed_cb|> Utilities.Circular.get_dict(), new_failed_cb |> Utilities.Circular.get_dict()])
+
+        #          Logging.debug("old_faild_dict:~p failed_dict:~p",[failed_cb|> Utilities.Circular.get_dict(), new_failed_cb |> Utilities.Circular.get_dict()])
 
         %State{
           state
@@ -322,13 +345,10 @@ defmodule GatewayCore.Outputs.Red9CobraSimpleOutGW do
 
         Logging.debug("unique received_items")
 
-        received_items =
-          get_true_message_list_to_send(received_items, state)
-          Logging.debug("after check message true message_count:~p",[received_items|> length])
+        received_items = get_true_message_list_to_send(received_items, state)
+        Logging.debug("after check message true message_count:~p", [received_items |> length])
 
-          received_items = received_items           |> Enum.uniq_by(fn x -> get_message_id(x) end)
-
-
+        received_items = received_items |> Enum.uniq_by(fn x -> get_message_id(x) end)
 
         Logging.debug("after uniqurness, message set count:~p", [
           received_items |> length
@@ -379,14 +399,13 @@ defmodule GatewayCore.Outputs.Red9CobraSimpleOutGW do
 
         Logging.debug("charge_list count:~p", [charge_list |> length])
 
-        {new_internal_state, sending_result} = send_sms_list(sms_list, internal_state)
+        {new_internal_state, sending_result} = send_sms_list(sms_list, state)
         try_fails(sms_list, sending_result, state)
         new_state = update_state_by_success_messages_id(sms_list, sending_result, state)
 
         {new_internal_state, otp_send_result} = send_otp_list(otp_list, internal_state)
         try_fails(otp_list, otp_send_result, state)
         new_state = update_state_by_success_messages_id(otp_list, otp_send_result, new_state)
-
 
         {new_internal_state, charge_send_result} = send_charge_list(charge_list, internal_state)
         try_fails(charge_list, charge_send_result, state)

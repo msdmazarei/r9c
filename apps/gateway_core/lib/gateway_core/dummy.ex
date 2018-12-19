@@ -46,6 +46,10 @@ defmodule GatewayCore.Outputs.Dummy do
     @gateway_config[:nodes]
   end
 
+  def gw_limitations() do
+    @gateway_config[:throttle]
+  end
+
   def gw_init() do
     Logging.debug("Called")
     []
@@ -71,6 +75,7 @@ defmodule GatewayCore.Outputs.Dummy do
     results =
       sms_list_to_send
       |> Enum.map(fn x ->
+        enforce_throttle(gw_limitations())
         crash_p = :rand.uniform()
         fail_p = :rand.uniform()
 
@@ -103,7 +108,7 @@ defmodule GatewayCore.Outputs.Dummy do
       end)
 
     r = {state, results}
-    Logging.debug("Retuens:~p", [r])
+    Logging.debug("Retuens", [])
     r
   end
 
