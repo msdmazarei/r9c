@@ -4,7 +4,10 @@ defmodule Dispatcher.Process.VAS.UserProcess do
   require Logger
   require Utilities.Logging
   require Utilities
-
+  require DatabaseEngine.Models.Utils
+  require DatabaseEngine.Utils.EventLogger
+  alias DatabaseEngine.Utils.EventLogger
+  alias DatabaseEngine.Models.Utils, as: ModelUtils
   alias Utilities.Logging
   #  alias :luerl, as: LUA
 
@@ -59,14 +62,15 @@ defmodule Dispatcher.Process.VAS.UserProcess do
       end)
 
     Logging.debug("initialize state: ~p", [state])
+    EventLogger.log_event(nil, nil, "init", %{"cell_no" => cell_no})
     {:ok, state}
     #    {:ok, %{"last_arrived_message_time" => Utilities.now(), "cell_no" => cell_no}}
   end
 
   defp send_to_queue(cell_no, result, sms, queue_name) do
     case DatabaseEngine.DurableQueue.enqueue(queue_name, %{
-    "type"=> "script_result",
-    "module" => __MODULE__,
+           "type" => "script_result",
+           "module" => __MODULE__,
            "sms" => sms,
            "script_result" => result,
            "cell_no" => cell_no,
@@ -148,7 +152,7 @@ defmodule Dispatcher.Process.VAS.UserProcess do
     rtn =
       if state.last_10_processed_messages |> Enum.member?(sms.id) do
         Logging.debug("message: ~p already processed.", [sms.id])
-        {:reply, :ok, state}
+        {:reply, :trye, state}
       else
         script = get_service_script(sms, state)
 
@@ -169,9 +173,17 @@ defmodule Dispatcher.Process.VAS.UserProcess do
         }
 
         state = update_last_10_processed_messages(state, sms)
-
         {:reply, true, state}
       end
+
+    Logging.debug("log_event called")
+
+    EventLogger.log_event(
+      ModelUtils.get_entity_type(sms),
+      ModelUtils.get_entity_id(sms),
+      "process",
+      %{}
+    )
 
     rtn
   end
@@ -193,6 +205,39 @@ defmodule Dispatcher.Process.VAS.UserProcess do
   #  end
 
   @compile {:inline, get_service_script: 2}
+  defp get_service_script(%DatabaseEngine.Models.SMS{receiver: "3285"}, _state) do
+    """
+      print ("service masoud is called.")
+      sms = cel.incoming_message
+      function is_member(sender)
+        key = "3285" .. _G.cel.incoming_message.sender
+        value = "3285"
+        return _G.cel.kvdb.get(key) == "3285"
+      end
+
+      function join()
+        key = "3285" .. _G.cel.incoming_message.sender
+        value = "3285"
+        _G.cel.kvdb.set(key,value)
+      end
+
+      you_are_member_already = "you are servic member, ask time or date or send 0 to unsub"
+
+      if is_member() then
+        if sms.body == "1" then
+          cel.reply(you_are_member_already)
+        end
+
+      else
+        if sms.body == "1" then
+          join()
+          cel.reply("Welcome to msd service. ask time or date or send 0 to unsub")
+        end
+
+      end
+    """
+  end
+
   defp get_service_script(_sms, _state) do
     """
       print("hello world")
