@@ -9,6 +9,9 @@ defmodule Dispatcher.Process do
   require Logger
   require Utilities.Logging
   alias Utilities.Logging
+  require DatabaseEngine.Utils.EventLogger
+  alias DatabaseEngine.Utils.EventLogger
+  alias DatabaseEngine.Models.Utils, as: ModelUtils
 
   @config Application.get_env(:dispatcher, __MODULE__)
   @alive_response_for_UP @config[:alive_response_for_UP]
@@ -312,10 +315,26 @@ defmodule Dispatcher.Process do
     case tran_res do
       {:atomic, v} ->
         Logging.debug("Transaction Done With Return Value:~p", [v])
+
+        EventLogger.log_event(
+          ModelUtils.get_entity_type(message),
+          ModelUtils.get_entity_id(message),
+          "SEND_MSG",
+          %{"process_name" => process_name}
+        )
+
         v
 
       {:aborted, r} ->
         Logging.debug("Transaction Failed With Return Value:~p", [r])
+
+        EventLogger.log_event(
+          ModelUtils.get_entity_type(message),
+          ModelUtils.get_entity_id(message),
+          "SEND_MSG_FAILED",
+          %{"process_name" => process_name}
+        )
+
         r
     end
   end
