@@ -25,8 +25,12 @@ defmodule GatewayCore.Outputs.Red9CobraSimpleOutGW do
     #    use KafkaEx.GenConsumer
     quote do
       use KafkaEx.GenConsumer
+      #      use DatabaeEngine.Utils.EventLogger
+
       require Logger
       require Utilities.Logging
+      require DatabaseEngine.Utils.EventLogger
+      alias DatabaseEngine.Utils.EventLogger
 
       defmodule State do
         defstruct partition: 0,
@@ -41,7 +45,7 @@ defmodule GatewayCore.Outputs.Red9CobraSimpleOutGW do
                   limitation: []
       end
 
-      def enforce_throttle( l) when l in [nil, []] do
+      def enforce_throttle(l) when l in [nil, []] do
         true
       end
 
@@ -75,6 +79,7 @@ defmodule GatewayCore.Outputs.Red9CobraSimpleOutGW do
         }
 
         #        Logging.debug("Returns: ~p", [rtn])
+        EventLogger.log_event(nil, nil, "init", %{"partition" => partition, "topic" => topic})
         rtn
       end
 
@@ -164,6 +169,10 @@ defmodule GatewayCore.Outputs.Red9CobraSimpleOutGW do
 
         drop_messages
         |> Enum.map(fn x ->
+          EventLogger.log_event(SMS, get_message_id(x), "DROP", %{
+            "cause" => "exceeds retry count"
+          })
+
           Logging.warn("MSG ID DROPPED CAUSE OF RETRY_COUNT:~p", [get_message_id(x)])
         end)
 
@@ -232,6 +241,7 @@ defmodule GatewayCore.Outputs.Red9CobraSimpleOutGW do
         final_messages
         |> Enum.map(fn x ->
           Logging.debug("enqueue message:~p for later try", [x])
+          EventLogger.log_event(SMS, get_message_id(x), "RETRY", %{})
           DurableQueue.enqueue(topic, partition, x)
         end)
       end
@@ -525,6 +535,8 @@ defmodule GatewayCore.Outputs.Red9CobraSimpleOutGW do
           item = :lists.nth(i, items)
 
           if :lists.nth(i, send_results) == true do
+            EventLogger.log_event(SMS, get_message_id(item), "SENT", %{})
+
             if success_Q != nil do
               item =
                 case item do
@@ -553,6 +565,8 @@ defmodule GatewayCore.Outputs.Red9CobraSimpleOutGW do
               Logging.debug("No Success Q Defined, to push successful sms", [])
             end
           else
+            EventLogger.log_event(SMS, get_message_id(item), "FAIL_TO_SEND", %{})
+
             if fail_Q != nil do
               item =
                 case item do
