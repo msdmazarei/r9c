@@ -276,3 +276,34 @@ defmodule DatabaseEngine.Struct.Apikey do
   @enforce_keys []
   defstruct net_acl: %DatabaseEngine.Struct.NetACL{}
 end
+
+defmodule DatabaseEngine.Models.Utils do
+  def get_entity_id(msg) do
+    case msg do
+      %DatabaseEngine.Models.SMS{} -> msg.id
+      %DatabaseEngine.Models.Charge.VAS{} -> msg.id
+      %DatabaseEngine.Models.OTP.VAS{} -> msg.id
+      v when is_map(v) -> v[:id] or v["id"]
+      _ -> nil
+    end
+  end
+
+  def get_entity_type(msg) do
+    case msg do
+      v = %DatabaseEngine.Models.SMS{} ->
+        DatabaseEngine.Models.SMS
+
+      v = %DatabaseEngine.Models.Charge.VAS{} ->
+        DatabaseEngine.Models.Charge.VAS
+
+      v = %DatabaseEngine.Models.OTP.VAS{} ->
+        DatabaseEngine.Models.OTP.VAS
+
+      v when is_map(v) ->
+        v[:__struct__] or v[:__orig_struct__] or v["__struct__"] or v["__orig_struct__"]
+
+      _ ->
+        nil
+    end
+  end
+end
