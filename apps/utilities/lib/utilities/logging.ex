@@ -4,7 +4,8 @@ defmodule Utilities.Logging do
 
   defmacro debug(message) do
     quote do
-      if __MODULE__ == DatabaseEngine.DurableQueue do
+      if [DatabaseEngine.DurableQueue, DatabaseEngine.DurableQueue.Deserialize.Map]
+         |> Enum.member?(__MODULE__) do
         :ok
       else
         Logger.debug(fn ->
@@ -18,7 +19,8 @@ defmodule Utilities.Logging do
 
   defmacro debug(message, gholi) do
     quote do
-      if __MODULE__ == DatabaseEngine.DurableQueue do
+      if [DatabaseEngine.DurableQueue, DatabaseEngine.DurableQueue.Deserialize.Map]
+         |> Enum.member?(__MODULE__) do
         :ok
       else
         Logger.debug(fn ->
