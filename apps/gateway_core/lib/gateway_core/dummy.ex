@@ -104,6 +104,8 @@ defmodule GatewayCore.Outputs.Dummy do
             x.receiver,
             x.body
           ])
+
+          true
         end
       end)
 
