@@ -1,0 +1,17 @@
+{
+  "type": "object",
+  "required": ["foo","bar"],
+  "properties": {
+    "foo": {
+      "type": "string"
+    },
+    "bar": {
+      "type": "object",
+      "properties": {
+        "od":{"type": "integer" }
+
+      }
+    }
+
+  }
+}
