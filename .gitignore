@@ -22,3 +22,5 @@ erl_crash.dump
 *.secret.exs
 
 STORAGE/RED9_COBRA_db_*/
+.elixir_ls/**
+.idea/**
