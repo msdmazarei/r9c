@@ -20,7 +20,12 @@ defmodule ApiserverWeb.Router do
   end
 
   # Other scopes may use custom stacks.
-  # scope "/api", ApiserverWeb do
-  #   pipe_through :api
-  # end
+  scope "/api", ApiserverWeb do
+    pipe_through :api
+
+    post "/hasan/:p", DummyGatewayIngressController, :hasan
+
+    get "/admin/clients", Client.ClientController, :all_clients
+    post "/admin/clients", Client.ClientController, :all_clients
+  end
 end
