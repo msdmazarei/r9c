@@ -25,7 +25,10 @@ defmodule ApiserverWeb.Router do
 
     post "/hasan/:p", DummyGatewayIngressController, :hasan
 
-    get "/admin/clients", Client.ClientController, :all_clients
-    post "/admin/clients", Client.ClientController, :all_clients
+    get "/admin/clients/:id", Client.ClientController, :get
+    post "/admin/clients", Client.ClientController, :create
+    delete "/admin/clients/:id/:version", Client.ClientController, :delete
+    put "/admin/clients/:id/:version", Client.ClientController, :edit
+
   end
 end

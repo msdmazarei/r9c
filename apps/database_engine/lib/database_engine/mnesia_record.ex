@@ -4,6 +4,7 @@ defmodule DatabaseEngine.Mnesia.Records do
   Record.defrecord(:client_tb, ClientTb,
     idx: nil,
     create_unixepochx: nil,
+    version: nil,
     name: nil,
     _internal: nil
   )

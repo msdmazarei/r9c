@@ -1,17 +1,12 @@
 {
   "type": "object",
-  "required": ["foo","bar"],
+  "required": ["name","is_company"],
   "properties": {
-    "foo": {
+    "name": {
       "type": "string"
     },
-    "bar": {
-      "type": "object",
-      "properties": {
-        "od":{"type": "integer" }
-
-      }
+    "is_company": {
+      "type":"boolean"
     }
-
   }
 }
