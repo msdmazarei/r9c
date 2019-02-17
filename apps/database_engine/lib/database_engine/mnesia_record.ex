@@ -8,5 +8,4 @@ defmodule DatabaseEngine.Mnesia.Records do
     name: nil,
     _internal: nil
   )
-
 end

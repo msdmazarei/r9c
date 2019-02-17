@@ -95,8 +95,6 @@ defmodule Utilities do
     end)
   end
 
-
-
   def update_struct(struct, attrs) do
     Enum.reduce(Map.to_list(struct), struct, fn {k, _}, acc ->
       case Map.fetch(attrs, Atom.to_string(k)) do

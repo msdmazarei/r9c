@@ -10,21 +10,26 @@ defmodule ApiserverWeb.RCBaseController do
       alias Plug.Conn
 
       use ApiserverWeb, :controller
-#      plug Plug.Parsers, parsers: [:urlencoded, :json],
-#                         pass: ["text/*"],
-#                         json_decoder: Jason
-#
+      #      plug Plug.Parsers, parsers: [:urlencoded, :json],
+      #                         pass: ["text/*"],
+      #                         json_decoder: Jason
+      #
       def request_body_validation(conn, params) do
-        Logging.debug("Called, host:~p method:~p path_info:~p scrip_name:~p request_path:~p, params:~p, body_params:~p", [
-          conn.host,
-          conn.method,
-          conn.path_info,
-          conn.script_name,
-          conn.request_path,params,
-        conn.body_params
-        ])
+        Logging.debug(
+          "Called, host:~p method:~p path_info:~p scrip_name:~p request_path:~p, params:~p, body_params:~p",
+          [
+            conn.host,
+            conn.method,
+            conn.path_info,
+            conn.script_name,
+            conn.request_path,
+            params,
+            conn.body_params
+          ]
+        )
 
         req_body = conn.body_params
+
         schema_file =
           Path.join([
             Path.dirname(__ENV__.file),
@@ -47,7 +52,8 @@ defmodule ApiserverWeb.RCBaseController do
                     false ->
                       Logging.debug("invalid request, return 400")
                       {_, errors} = ExJsonSchema.Validator.validate(parsed_json, req_body)
-                      Logging.debug("errors:~p",[errors])
+                      Logging.debug("errors:~p", [errors])
+
                       rtn =
                         errors
                         |> Enum.reduce(%{}, fn {e, fieldpath}, acc ->

@@ -29,6 +29,5 @@ defmodule ApiserverWeb.Router do
     post "/admin/clients", Client.ClientController, :create
     delete "/admin/clients/:id/:version", Client.ClientController, :delete
     put "/admin/clients/:id/:version", Client.ClientController, :edit
-
   end
 end

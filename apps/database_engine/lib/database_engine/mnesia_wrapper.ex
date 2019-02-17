@@ -4,7 +4,7 @@ defmodule DatabaseEngine.MnesiaWrapper do
       :ok -> true
       {:ok, res} -> {true, res}
       {:aborted, err} -> {false, err}
-      {:atomic,res } -> {true,res}
+      {:atomic, res} -> {true, res}
       v -> v
     end
   end

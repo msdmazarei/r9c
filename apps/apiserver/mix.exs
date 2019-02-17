@@ -43,7 +43,8 @@ defmodule Apiserver.MixProject do
       {:gettext, "~> 0.11"},
       {:jason, "~> 1.0"},
       {:plug_cowboy, "~> 2.0"},
-      {:ex_json_schema, "~> 0.5.4"}
+      {:ex_json_schema, "~> 0.5.4"},
+      {:utilities, in_umbrella: true}
     ]
   end
 end

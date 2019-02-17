@@ -19,7 +19,7 @@ defmodule DatabaseEngine.DbModels.Client do
             version: nil
 
   def from_mnesia_record(data) do
-    Logging.debug("Called. data:~p",[data])
+    Logging.debug("Called. data:~p", [data])
 
     case Records.client_tb(data, :_internal) do
       nil ->
@@ -27,7 +27,7 @@ defmodule DatabaseEngine.DbModels.Client do
         nil
 
       m when is_map(m) ->
-      Logging.debug("_internal field of record is map.")
+        Logging.debug("_internal field of record is map.")
         m |> Map.get("full_record")
 
       _ ->

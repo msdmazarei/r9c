@@ -1,0 +1,10 @@
+{
+   "queryType": "scan",
+   "dataSource": "rashasms",
+   "resultFormat": "list",
+   "columns":[],
+   "intervals": [
+   ],
+   "batchSize":20480,
+   "limit":5
+ }

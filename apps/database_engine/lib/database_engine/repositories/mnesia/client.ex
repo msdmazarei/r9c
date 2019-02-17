@@ -14,19 +14,30 @@ defmodule DatabaseEngine.Repositories.Mnesia.Client do
 
   require Record
 
+  require DatabaseEngine.Mnesia.Records
+  alias DatabaseEngine.Mnesia.Records
+
   def get_tb_name() do
     record = Serializer.to_mnesia_record(%ClientModel{})
     elem(record, 0)
   end
 
+  def list(create_epoch, count) do
+    Logging.debug("Called. create_epoch: ~p count: ~p", [create_epoch, count])
+    :mnesia.select(get_tb_name(), [{:"Elixir.ClientTb", :_ = :_}, [], [:_]], count, :read)
+  end
+
   @spec add_new(any(), boolean(), boolean()) :: DatabaseEngine.DbModels.Client.t()
   def add_new(name, is_company, is_active)
       when is_boolean(is_company) and is_boolean(is_active) do
-    Logging.debug("called. with params. name: ~p is_company:~p is_active:~p", [
-      name,
-      is_company,
-      is_active
-    ])
+    Logging.debug(
+      "called. with params. name: ~p is_company:~p is_active:~p",
+      [
+        name,
+        is_company,
+        is_active
+      ]
+    )
 
     instance = %ClientModel{
       name: name,
@@ -70,24 +81,22 @@ defmodule DatabaseEngine.Repositories.Mnesia.Client do
         if instance.version == version do
           MnesiaWrapper.delete(get_tb_name(), id)
         else
-          Logging.debug("instance.version: ~p requested_version:~p",[instance.version,version])
+          Logging.debug("instance.version: ~p requested_version:~p", [instance.version, version])
           :bad_version
         end
     end
   end
 
-
-  def update(instance,map_for_updating) do
+  def update(instance, map_for_updating) do
     Logging.debug("Called.")
-    edited_instance = Utilities.update_struct(instance,map_for_updating)
+    edited_instance = Utilities.update_struct(instance, map_for_updating)
     Logging.debug("increase version")
-    edited_instance = %{edited_instance | version: (edited_instance.version  || 1) + 1 }
+    edited_instance = %{edited_instance | version: (edited_instance.version || 1) + 1}
 
     record = Serializer.to_mnesia_record(edited_instance)
 
     true = MnesiaWrapper.write(record)
     Logging.debug("stored in mnesia successfully")
     edited_instance
-
   end
 end

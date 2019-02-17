@@ -46,10 +46,10 @@ config :kafka_ex,
   # errors when producing messages, it may be necessary to modify "advertised.host.name" in the
   # server.properties file.
   # In the case below you would set "advertised.host.name=localhost"
+  #       {"msd.pc.rashavas.office", 9092}
+
   brokers: [
-    {"localhost", 9092},
-    {"localhost", 9092},
-    {"localhost", 9092}
+    {"s1.kafka.local", 9092}
   ],
   #
   # OR:

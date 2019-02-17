@@ -24,6 +24,11 @@ defmodule ApiserverWeb.Client.ClientController do
     |> json(%{message: __ENV__.file})
   end
 
+  def list(conn, params) do
+    {from_date, _} = params["from_date"] |> Integer.parse()
+    {count, _} = params["count"] |> Integer.parse()
+  end
+
   def get(conn, params) do
     Logging.debug("Called.")
     id = params["id"]
@@ -32,12 +37,14 @@ defmodule ApiserverWeb.Client.ClientController do
     case Repo.get_by_id(id) do
       nil ->
         Logging.debug("id: ~p not found. 404.", [id])
+
         conn
         |> put_status(404)
         |> text("not found.")
 
       instance ->
         Logging.debug("instance id: ~p is found.", [id])
+
         conn
         |> json(instance)
     end
@@ -49,11 +56,9 @@ defmodule ApiserverWeb.Client.ClientController do
     Logging.debug("body is: ~p", [req_body])
 
     db_op_result =
-      MnesiaWrapper.do_transactional(
-        fn ->
-          Repo.add_new(req_body["name"], req_body["is_company"], false)
-        end
-      )
+      MnesiaWrapper.do_transactional(fn ->
+        Repo.add_new(req_body["name"], req_body["is_company"], false)
+      end)
 
     case db_op_result do
       {true, instance} ->
@@ -75,69 +80,75 @@ defmodule ApiserverWeb.Client.ClientController do
   end
 
   def edit(conn, params) do
-
     Logging.debug("Called.")
     instance_id = params["id"]
-    {instance_version, _} = params["version"]
-                            |> Integer.parse()
+
+    {instance_version, _} =
+      params["version"]
+      |> Integer.parse()
+
     Logging.debug("editing id:~p version:~p", [instance_id, instance_version])
     req_body = conn.body_params
 
-    db_op_result = MnesiaWrapper.do_transactional(
-      fn ->
+    db_op_result =
+      MnesiaWrapper.do_transactional(fn ->
         case Repo.get_by_id(instance_id) do
           nil ->
             nil
+
           db_instance ->
             if db_instance.version != instance_version do
               :bad_version
             else
               Repo.update(db_instance, req_body)
             end
-
         end
-
-      end
-    )
+      end)
 
     case db_op_result do
       {true, nil} ->
         Logging.debug("no model found in db. for id:~p", [instance_id])
+
         conn
         |> put_status(404)
         |> json(%{})
+
       {true, :bad_version} ->
         Logging.debug("bad version")
+
         conn
         |> put_status(409)
         |> json(%{})
 
       {true, result} ->
         Logging.debug("update is done successfully")
+
         conn
         |> json(result)
+
       {false, err} ->
         Logging.debug("error is happend in update process. error:~p", [err])
+
         conn
         |> put_status(500)
         |> json(%{})
-
     end
   end
 
   def delete(conn, params) do
     Logging.debug("Called.")
     instance_id = params["id"]
-    {instance_version, _} = params["version"]
-                            |> Integer.parse()
+
+    {instance_version, _} =
+      params["version"]
+      |> Integer.parse()
+
     Logging.debug("Deleting id:~p version:~p", [instance_id, instance_version])
 
     {true, result} =
-      MnesiaWrapper.do_transactional(
-        fn ->
-          Repo.delete(instance_id, instance_version)
-        end
-      )
+      MnesiaWrapper.do_transactional(fn ->
+        Repo.delete(instance_id, instance_version)
+      end)
 
     case result do
       nil ->

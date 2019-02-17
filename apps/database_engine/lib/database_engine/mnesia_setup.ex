@@ -99,7 +99,7 @@ defmodule DatabaseEngine.Mnesia.DbSetup do
     {AuthGroupTb, [:idx, :name_idx]},
     {AuthMembershipTb, [:idx, :user_idx, :group_idx]},
     {AuthPermissionTb, [:idx, :group_idx, :role_idx]},
-    {ClientTb, [:idx,:create_unixepochx,:version,:name, :_internal]},
+    {ClientTb, [:idx, :create_unixepochx, :version, :name, :_internal]},
     {MembershipTb, [:idx, :source_idx, :target_idx, :scope_idx]},
     {NetAclTb, [:idx, :cidr_idx, :action_idx, :_internal]},
     {CelTb, [:idx, :cel]},

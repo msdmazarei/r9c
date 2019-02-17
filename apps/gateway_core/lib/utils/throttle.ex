@@ -42,14 +42,14 @@ defmodule GatewayCore.Utils.Throttle do
         _ -> false
       end
 
-#    Logging.debug("returns:~p", [res])
+    #    Logging.debug("returns:~p", [res])
     res
   end
 
   @spec check_is_allowed(String.t(), integer(), integer()) :: boolean()
   def check_is_allowed(throttle_name, how_many_allowed, how_much_time) do
     key = "throttle-#{throttle_name}-#{how_many_allowed}-#{how_much_time}"
-#    Logging.debug("key: ~p", [key])
+    #    Logging.debug("key: ~p", [key])
 
     throttle_state =
       case KV.get(key) do
@@ -64,13 +64,13 @@ defmodule GatewayCore.Utils.Throttle do
 
     unix_time_now = Utilities.now()
 
-#    Logging.debug("throttle_state:~p", [throttle_state])
+    #    Logging.debug("throttle_state:~p", [throttle_state])
 
     time_offset = unix_time_now - throttle_state.start_time
     now_index = div(time_offset * @throttle_slice_count, how_much_time)
     available_quota = now_index * throttle_state.each_division_count
 
-#    Logging.debug("time offset:~p now_index:~p", [time_offset, now_index])
+    #    Logging.debug("time offset:~p now_index:~p", [time_offset, now_index])
 
     correct_parts =
       case now_index do
@@ -91,11 +91,11 @@ defmodule GatewayCore.Utils.Throttle do
       end
 
     total_items_sum = correct_parts |> Enum.sum()
-#    Logging.debug("Correct Parts:~p sum:~p", [correct_parts, total_items_sum])
+    #    Logging.debug("Correct Parts:~p sum:~p", [correct_parts, total_items_sum])
 
     case total_items_sum do
       v when v >= available_quota ->
-#        Logging.debug("could not send")
+        #        Logging.debug("could not send")
         false
 
       _ ->
@@ -123,10 +123,10 @@ defmodule GatewayCore.Utils.Throttle do
           })
 
         #        if rem(throttle_state.total_done,101) == 0 do
-#        Logging.debug("thorttle_state.total_done:~p, window_c:~p", [
-#          throttle_state.total_done + 1,
-#          throttle_state.window_count
-#        ])
+        #        Logging.debug("thorttle_state.total_done:~p, window_c:~p", [
+        #          throttle_state.total_done + 1,
+        #          throttle_state.window_count
+        #        ])
 
         #        end
         KV.set(key, throttle_state)
