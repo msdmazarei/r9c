@@ -1,9 +1,8 @@
-defmodule Dispatcher.Process.VAS.UserProcess.Script do
+defmodule Dispatcher.UserProcess.Script do
   @moduledoc false
 
   require Logger
   require Utilities.Logging
-  require DatabaseEngine.Models.SMS
   require GatewayCore.Utils.Helper
 
   alias Utilities.Logging
@@ -11,17 +10,55 @@ defmodule Dispatcher.Process.VAS.UserProcess.Script do
   alias :luerl, as: LUA
 
   @orig_message_key :orig_message_key
-  @spec run_script(
-          String.t(),
-          DatabaseEngine.Models.SMS | DatabaeEngine.Models.RadiusPacket,
-          any(),
-          integer()
-        ) ::
+  @spec run_script(String.t(), any(), any(), integer()) ::
           {:return, any()} | {:error, any()}
+  @spec run_script(any(), any(), any(), any(), :infinity | non_neg_integer()) :: {any(), any()}
+  def parse_rtn_value(r, lstate) do
+    r
+    |> Enum.map(fn x ->
+      case x do
+        {:tref, _} -> LUA.decode(x, lstate)
+        _ -> x
+      end
+    end)
+  end
+
+  def to_lua(var) when is_number(var) or is_binary(var) do
+    var
+  end
+
+  def to_lua(var) do
+    v1 = Utilities.nested_tuple_to_list(var)
+    v2 = Utilities.Conversion.nested_map_to_tuple_list(v1)
+    v2
+  end
+
+  def to_elixir(var) when is_list(var) do
+    if Utilities.is_list_of_tuples(var) do
+      v1 =
+        var
+        |> Enum.map(fn {k, v} ->
+          {k, to_elixir(v)}
+        end)
+
+      Map.new(v1)
+    else
+      var
+      |> Enum.map(fn x ->
+        to_elixir(x)
+      end)
+    end
+  end
+
+  def to_elixir(var) when is_number(var) or is_bitstring(var) do
+    var
+  end
+
   def run_script(
         script_to_run,
         msg,
         user_process_state,
+        additional_functionality \\ %{},
         script_run_timeout \\ 5000
       ) do
     Logging.debug("Called.")
@@ -32,13 +69,14 @@ defmodule Dispatcher.Process.VAS.UserProcess.Script do
       Process.spawn(
         fn ->
           try do
-            lua_state = init_lua(msg)
+            lua_state = init_lua(msg, additional_functionality)
 
             set_orig_message(msg, lua_state)
             set_user_process_state(user_process_state)
 
-            {r, _} = LUA.do(script_to_run, lua_state)
-            send(main_process_id, {:script, ref, :return, r})
+            {r, lstate} = LUA.do(script_to_run, lua_state)
+
+            send(main_process_id, {:script, ref, :return, parse_rtn_value(r, lstate)})
           rescue
             e ->
               Logging.debug("Exception happen it is :~p", [e])
@@ -100,7 +138,12 @@ defmodule Dispatcher.Process.VAS.UserProcess.Script do
   def in_array(args, state) do
     Logging.debug("in_array_called with args:~p~n", [args])
     [item, list] = args
-    result = list |> Enum.map(fn {_, x} -> x end) |> Enum.find(fn x -> x == item end) != nil
+
+    result =
+      list
+      |> Enum.map(fn {_, x} -> x end)
+      |> Enum.find(fn x -> x == item end) != nil
+
     {[result], state}
   end
 
@@ -122,11 +165,8 @@ defmodule Dispatcher.Process.VAS.UserProcess.Script do
           "level" => level,
           "message" => msg,
           "type" => "cel.logging",
-          "pid_name" => ups.cell_no,
-          "sms_sender" => get_orig_message(state).sender,
           "time" => Utilities.now(),
-          "module" => __MODULE__,
-          "sms_id" => get_orig_message(state).id
+          "module" => __MODULE__
         }
 
         Logging.debug("data_to_enqueue:~p", [data_to_enqueue])
@@ -155,30 +195,7 @@ defmodule Dispatcher.Process.VAS.UserProcess.Script do
 
   def reply(args, state) do
     Logging.debug("reply called. args:~p~n", [args])
-    [msg_text | _] = args
-    orig_msg = get_orig_message(state)
-    Logging.debug("orig_msg: ~p", [orig_msg])
-
-    msg_to_send = %DatabaseEngine.Models.SMS{
-      orig_msg
-      | receiver: orig_msg.sender,
-        body: msg_text,
-        sender: nil,
-        options: Map.put(orig_msg.options, "reply_to_message", orig_msg)
-    }
-
-    gateway_to_send = GatewayCore.Utils.Helper.message_out_gateway(msg_to_send)
-    Logging.debug("Gateway To Send Msg: ~p", [gateway_to_send])
-
-    r =
-      case Kernel.apply(gateway_to_send, :send, [msg_to_send]) do
-        :ok -> true
-        :nok -> false
-      end
-
-    Logging.debug("Gateway returned: ~p", [r])
-
-    {[r], state}
+    {[true], state}
   end
 
   def kvdb_get(args, state) do
@@ -275,14 +292,14 @@ defmodule Dispatcher.Process.VAS.UserProcess.Script do
     {[Utilities.Conversion.nested_map_to_tuple_list(resp)], state}
   end
 
-  defp init_lua(msg) do
+  defp init_lua(msg, additional_functionality \\ %{}) do
     s0 = LUA.init()
     incoming_message = Utilities.Conversion.nested_map_to_tuple_list(msg)
 
-    s1 =
-      LUA.set_table(
-        [:cel],
-        Map.to_list(%{
+    functionalities =
+      Map.merge(
+        additional_functionality,
+        %{
           "incoming_message" => incoming_message,
           "is_subscribed" => &is_subscribed/2,
           "unsubscribe" => &unsubscribe/2,
@@ -299,7 +316,13 @@ defmodule Dispatcher.Process.VAS.UserProcess.Script do
               "set" => &kvdb_set/2
             }),
           "http" => &http_request_check/2
-        }),
+        }
+      )
+
+    s1 =
+      LUA.set_table(
+        [:cel],
+        Map.to_list(functionalities),
         s0
       )
 

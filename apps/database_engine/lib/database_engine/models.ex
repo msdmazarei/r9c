@@ -1,7 +1,22 @@
+# ======================
+# models are useful to communicate system parts via queue
+
 defmodule DatabaseEngine.Models.InternalCallback do
   defstruct module_name: "",
             function_name: "",
             arguments: []
+end
+
+defmodule DatabaseEngine.Models.RadiusPacket do
+  defstruct address: nil,
+            port: nil,
+            secret: nil,
+            code: nil,
+            authenticator: nil,
+            id: nil,
+            attribs: %{},
+            options: %{},
+            internal_callback: nil
 end
 
 defmodule DatabaseEngine.Models.SMS do
@@ -94,7 +109,8 @@ defimpl Jason.Encoder,
     DatabaseEngine.Models.OTP.VAS,
     DatabaseEngine.Models.OTP.VAS.IMI_GW_OPTS,
     DatabaseEngine.Models.InternalCallback,
-    DatabaseEngine.Models.Charge.VAS
+    DatabaseEngine.Models.Charge.VAS,
+    DatabaseEngine.Models.RadiusPacket
   ] do
   def encode(struct, opts) do
     m = Map.from_struct(struct)

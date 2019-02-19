@@ -40,7 +40,10 @@ defmodule Utilities do
   def randnode do
     ## later, this needs to be fixed and cached.
     randseed()
-    all_active_nodes() |> Enum.shuffle() |> hd
+
+    all_active_nodes()
+    |> Enum.shuffle()
+    |> hd
   end
 
   @doc """
@@ -55,7 +58,8 @@ defmodule Utilities do
   gets unixtime
   """
   def now do
-    DateTime.utc_now() |> DateTime.to_unix(:millisecond)
+    DateTime.utc_now()
+    |> DateTime.to_unix(:millisecond)
   end
 
   def to_erl_list(x) do
@@ -75,11 +79,31 @@ defmodule Utilities do
   end
 
   def nested_tuple_to_list(list) when is_list(list) do
-    list |> Enum.map(&nested_tuple_to_list/1)
+    list
+    |> Enum.map(&nested_tuple_to_list/1)
   end
 
   def nested_tuple_to_list(tuple) when is_tuple(tuple) do
-    tuple |> Tuple.to_list() |> Enum.map(&nested_tuple_to_list/1)
+    tuple
+    |> Tuple.to_list()
+    |> Enum.map(&nested_tuple_to_list/1)
+  end
+
+  def nested_tuple_to_list(map) when is_map(map) do
+    Enum.reduce(
+      Map.to_list(map),
+      %{},
+      fn {k, v}, acc ->
+        new_v =
+          if is_list(v) or is_map(v) or is_tuple(v) do
+            nested_tuple_to_list(v)
+          else
+            v
+          end
+
+        Map.put(acc, k, new_v)
+      end
+    )
   end
 
   def nested_tuple_to_list(x), do: x
@@ -87,21 +111,29 @@ defmodule Utilities do
   def to_struct(kind, attrs) do
     struct = struct(kind)
 
-    Enum.reduce(Map.to_list(struct), struct, fn {k, _}, acc ->
-      case Map.fetch(attrs, Atom.to_string(k)) do
-        {:ok, v} -> %{acc | k => v}
-        :error -> acc
+    Enum.reduce(
+      Map.to_list(struct),
+      struct,
+      fn {k, _}, acc ->
+        case Map.fetch(attrs, Atom.to_string(k)) do
+          {:ok, v} -> %{acc | k => v}
+          :error -> acc
+        end
       end
-    end)
+    )
   end
 
   def update_struct(struct, attrs) do
-    Enum.reduce(Map.to_list(struct), struct, fn {k, _}, acc ->
-      case Map.fetch(attrs, Atom.to_string(k)) do
-        {:ok, v} -> %{acc | k => v}
-        :error -> acc
+    Enum.reduce(
+      Map.to_list(struct),
+      struct,
+      fn {k, _}, acc ->
+        case Map.fetch(attrs, Atom.to_string(k)) do
+          {:ok, v} -> %{acc | k => v}
+          :error -> acc
+        end
       end
-    end)
+    )
   end
 
   @spec callback(any(), String.t(), String.t(), list(any())) :: any()
@@ -126,17 +158,34 @@ defmodule Utilities do
       Kernel.apply(module, function, arguments)
     rescue
       e ->
-        Logging.error("problem to call module:~p function:~p args:~p error:~p", [
-          module,
-          function,
-          arguments,
-          e
-        ])
+        Logging.error(
+          "problem to call module:~p function:~p args:~p error:~p",
+          [
+            module,
+            function,
+            arguments,
+            e
+          ]
+        )
     end
   end
 
   @spec all_user_process_nodes() :: list(Atom.t())
   def all_user_process_nodes() do
     all_active_nodes()
+  end
+
+  def is_list_of_tuples(x) do
+    if is_list(x) do
+      x
+      |> Enum.reduce_while(true, fn x, acc ->
+        case x do
+          {_, _} -> {:cont, acc}
+          _ -> {:halt, false}
+        end
+      end)
+    else
+      false
+    end
   end
 end
