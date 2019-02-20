@@ -14,9 +14,13 @@ defmodule Utilities.Serializers.JSONSerializer do
 
 
   """
+  require Logger
+  require Utilities.Logging
+  alias Utilities.Logging
 
   @spec serialize(term) :: {:ok, String.t()} | {:error, Exception.t()}
   def serialize(object) do
+    Logging.debug("called",[])
     Jason.encode(object)
   end
 

@@ -170,6 +170,38 @@ defmodule Utilities do
     end
   end
 
+  def for_each_non_iterable_item(iter_item, func_to_call) do
+
+    f = fn y ->
+      for_each_non_iterable_item(y, func_to_call)
+    end
+
+    case iter_item do
+      ii when is_list(ii) ->
+        iter_item
+        |> Enum.map(fn x ->
+          for_each_non_iterable_item(x, f)
+        end)
+
+      ii when is_map(ii) ->
+        ii_ =
+          Map.to_list(ii)
+          |> Enum.map(fn x ->
+            for_each_non_iterable_item(x, f)
+          end)
+
+        Map.new(ii_)
+
+      ii when is_tuple(ii) ->
+        li = Tuple.to_list(ii)
+        r1 =for_each_non_iterable_item(li, f)
+        List.to_tuple(r1)
+
+      _ ->
+        func_to_call.(iter_item)
+    end
+  end
+
   @spec all_user_process_nodes() :: list(Atom.t())
   def all_user_process_nodes() do
     all_active_nodes()

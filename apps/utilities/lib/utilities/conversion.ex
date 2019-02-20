@@ -1,6 +1,16 @@
 defmodule Utilities.Conversion do
   @moduledoc false
+  require Utilities
 
+  def replace_all_bins_to_list(obj) do
+    Utilities.for_each_non_iterable_item(obj, fn x ->
+      if is_binary(x) do
+        :binary.bin_to_list(x)
+      else
+        x
+      end
+    end)
+  end
   def tuple_list_to_map(tp = [{_, _} | _]) when is_list(tp) do
     tp
     |> Enum.map(fn {k, v} ->

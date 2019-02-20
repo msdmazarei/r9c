@@ -113,7 +113,7 @@ defimpl Jason.Encoder,
     DatabaseEngine.Models.RadiusPacket
   ] do
   def encode(struct, opts) do
-    m = Map.from_struct(struct)
+    m = Utilities.nested_tuple_to_list(  Map.from_struct(struct))
     m = Map.put(m, :__orig_struct__, struct.__struct__)
     Jason.Encode.map(m, opts)
   end

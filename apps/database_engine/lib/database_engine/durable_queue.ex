@@ -1,20 +1,17 @@
-defprotocol DatabaseEngine.DurableQueue.Deserialize do
-  def deserialize(data)
-end
-
 defmodule DatabaseEngine.DurableQueue do
   @moduledoc false
 
   require Logger
   require Utilities.Logging
-
+  require Utilities.Serializers.JSONSerializer
   alias Utilities.Serializers.JSONSerializer, as: Serializer
   alias Utilities.Logging
 
   @spec serialize(any()) :: String.t() | :nok
   def serialize(obj) do
-    Logging.debug("Called. with obj: ~p", [obj])
-    rtn = Serializer.serialize(obj)
+    Logging.debug("Called.", [])
+    rtn = Utilities.Serializers.JSONSerializer.serialize(obj)
+    Logging.debug("serialized. r:~p",[rtn])
 
     case rtn do
       {:ok, serialized} ->
@@ -22,7 +19,7 @@ defmodule DatabaseEngine.DurableQueue do
         serialized
 
       _ ->
-        Logging.debug("Serializer Retuned unexpected result: #{rtn}. Return :nok")
+        Logging.warn("Serializer Retuned unexpected result: #{rtn}. Return :nok")
         :nok
     end
   end
@@ -189,4 +186,9 @@ defmodule DatabaseEngine.DurableQueue do
       pid
     )
   end
+end
+
+
+defprotocol DatabaseEngine.DurableQueue.Deserialize do
+  def deserialize(data)
 end

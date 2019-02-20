@@ -19,7 +19,9 @@ defmodule Utilities.Logging do
 
   defmacro debug(message, gholi) do
     quote do
-      if [DatabaseEngine.DurableQueue, DatabaseEngine.DurableQueue.Deserialize.Map]
+      if [
+        # DatabaseEngine.DurableQueue,
+        DatabaseEngine.DurableQueue.Deserialize.Map]
          |> Enum.member?(__MODULE__) do
         :ok
       else
