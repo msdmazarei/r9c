@@ -27,7 +27,7 @@ defmodule ProcessManager.UnitProcess.GeneralUnitProcess do
       @check_last_arrived_message_time :check_last_arrived_message_time
 
       defmodule State do
-        @module_config Application.get_env(:process_manager, __MODULE__)
+        @module_config Application.get_env(:process_manager, __MODULE__) || Application.get_env(:process_manager, ProcessManager.UnitProcess)
 
         @derive Jason.Encoder
         defstruct(
@@ -58,7 +58,8 @@ defmodule ProcessManager.UnitProcess.GeneralUnitProcess do
 
         watchdog()
 
-        init_state = %State{last_arrived_message_time: Utilities.now()}
+        init_state = %State{
+          last_arrived_message_time: Utilities.now()}
 
         state =
           Enum.reduce(Map.keys(init_state), init_state, fn item, s ->
@@ -76,7 +77,9 @@ defmodule ProcessManager.UnitProcess.GeneralUnitProcess do
         {:ok, state}
       end
 
-      def send_to_queue(result, msg, queue_name) do
+      def send_to_queue(result, msg, queue_name)
+      when is_binary(queue_name) or is_bitstring(queue_name)
+      do
         case DatabaseEngine.DurableQueue.enqueue(queue_name, %{
                "type" => "script_result",
                "module" => __MODULE__,
@@ -161,7 +164,7 @@ defmodule ProcessManager.UnitProcess.GeneralUnitProcess do
         rtn =
           if state.last_10_processed_messages |> Enum.member?(msg.id) do
             Logging.debug("message: ~p already processed.", [msg.id])
-            {:reply, :trye, state}
+            {:reply, :true, state}
           else
             script = ProcessManager.UnitProcess.Identifier.get_script(msg, state)
             script_result = ProcessManager.Script.run_script(
@@ -169,8 +172,9 @@ defmodule ProcessManager.UnitProcess.GeneralUnitProcess do
               msg,
               state,
               %{},
-              state.cel_script_limits.run_timeout
+              state.cel_script_limits.run_timeout || 5000
             )
+            Logging.debug("script result: ~p",[script_result])
 
             send_to_queue(
               script_result,
@@ -209,7 +213,7 @@ defmodule ProcessManager.UnitProcess.GeneralUnitProcess do
             state = %State{
               last_arrived_message_time: last_arrived_message_time}
           ) do
-        Logging.debug("~p :timeout called. last_arrived_message_time:~p", [
+        Logging.debug("timeout called. last_arrived_message_time:~p", [
           last_arrived_message_time
         ])
 
@@ -258,7 +262,6 @@ defmodule ProcessManager.UnitProcess.GeneralUnitProcess do
           :timeout,
           @wait_to_new_message_timeout_to_hibernate + 100
           )
-        Logging.debug("Calle.d")
 
         Process.send_after(
           self(),

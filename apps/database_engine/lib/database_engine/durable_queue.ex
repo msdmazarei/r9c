@@ -114,7 +114,7 @@ defmodule DatabaseEngine.DurableQueue do
 
   @spec enqueue(String.t(), any) :: :ok | :nok
   def enqueue(topic_name, object) do
-    Logging.debug("Called with parameters: topic_name: #{topic_name} object: ~p", [object])
+    Logging.debug("Called with parameters: topic_name:~p object: ~p", [topic_name,object])
 
     #    @fixme: increase round-robin process using process dictionary, increamenting by +1
     Logging.debug("calculating kafka topic partitions ...")
@@ -126,13 +126,13 @@ defmodule DatabaseEngine.DurableQueue do
 
     case partitions do
       l when is_list(l) and length(l) > 0 ->
-        Logging.debug("calulated partitions for topic: #{topic_name} are: ~p", [l])
+        Logging.debug("calulated partitions for topic: ~p are: ~p", [topic_name,l])
         enqueue(topic_name, hd(l), object)
 
       [] ->
         Logging.warn(
-          "no partition found for topic: #{topic_name}, may be there is no topic. data to enqueue: ~p",
-          [object]
+          "no partition found for topic: ~p, may be there is no topic. data to enqueue: ~p",
+          [topic_name,object]
         )
 
         :ok

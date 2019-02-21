@@ -151,6 +151,20 @@ defimpl DatabaseEngine.DurableQueue.Deserialize,
     result = Utilities.to_struct(struct_name, data)
 
     case struct_name do
+      DatabaseEngine.Models.RadiusPacket ->
+        result = %{
+          result
+          | attribs:
+              Map.to_list(result.attribs || %{})
+              |> Enum.reduce(%{}, fn {k, v}, acc ->
+                case Integer.parse(k) do
+                  {n, ""} when is_number(n) -> acc |> Map.put(n,v)
+                  #  %{acc | n => v}
+                  _ -> %{acc | k => v}
+                end
+              end)
+        }
+
       DatabaseEngine.Models.SMS ->
         f = fn key, val ->
           if ["imi_charge_code", "imi_short_code", "imi_service_key", "imi_sms_type"]

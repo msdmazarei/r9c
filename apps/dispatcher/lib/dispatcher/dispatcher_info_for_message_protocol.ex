@@ -7,6 +7,10 @@ defimpl Dispatcher.Protocols.DispatcherInfo,
   for: [
     DatabaseEngine.Models.RadiusPacket
   ] do
+  require Logger
+  require Utilities.Logging
+  alias Utilities.Logging
+
   def get_unit_process_module_for_message(_message) do
     ProcessManager.Process.RadiusProcess
   end
@@ -17,10 +21,12 @@ defimpl Dispatcher.Protocols.DispatcherInfo,
     username_attr_id = 1
     acct_session_id = 44
     acct_multi_session_id = 50
+    u = attrs[username_attr_id]
+    sid = attrs[acct_session_id]
+    smid = attrs[acct_multi_session_id]
+    Logging.debug("attrs:~p username:~p sid: ~p smid:~p", [attrs, u, sid, smid])
 
-    r =
-      attrs[username_attr_id] || attrs[acct_session_id] ||
-        attrs[acct_multi_session_id]
+    r = u || sid || smid
 
     r
   end

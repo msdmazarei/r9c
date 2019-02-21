@@ -1,4 +1,5 @@
 defprotocol ProcessManager.UnitProcess.Identifier do
+  @spec get_process_name(any()) :: any()
   def get_process_name(data)
   def get_identifier(data)
 
@@ -24,7 +25,7 @@ defimpl ProcessManager.UnitProcess.Identifier,
 
   def get_script(data = %DatabaseEngine.Models.RadiusPacket{}, _) do
     """
-    print("simple script")
+    print("++++++++++++++++++simple script-----------------------")
     """
   end
 end

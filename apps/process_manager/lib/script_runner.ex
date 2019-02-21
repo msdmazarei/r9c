@@ -27,7 +27,8 @@ defmodule ProcessManager.Script do
         additional_functionality \\ %{},
         script_run_timeout \\ 5000
       ) do
-    Logging.debug("Called.")
+    Logging.debug("Called. script_to_run:~p msg:~p user_process_state:~p additional_functionalities:~p timeout:~p",
+    [script_to_run,msg, user_process_state,additional_functionality,script_run_timeout])
     main_process_id = self()
     ref = make_ref()
 

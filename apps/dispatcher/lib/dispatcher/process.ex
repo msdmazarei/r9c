@@ -28,6 +28,13 @@ defmodule Dispatcher.Process do
     }
   end
 
+  @spec start_local_gen_server(atom(), any(), [
+          {:debug, [any()]}
+          | {:hibernate_after, :infinity | non_neg_integer()}
+          | {:name, atom() | {any(), any()} | {any(), any(), any()}}
+          | {:spawn_opt, :link | :monitor | {any(), any()}}
+          | {:timeout, :infinity | non_neg_integer()}
+        ]) :: false | pid()
   def start_local_gen_server(module, args \\ [], options \\ []) do
     Logging.debug("Called With module:~p args:~p options:~p", [module, args, options])
 
