@@ -47,18 +47,31 @@ defmodule Dispatcher.Process do
   end
 
   def get_module_by_message(message) do
-    case message do
-      %DatabaseEngine.Models.SMS{} -> Dispatcher.Process.VAS.UserProcess
-    end
+    Dispatcher.Protocols.DispatcherInfo.get_unit_process_module_for_message(message)
   end
 
   def get_process_name_by_message(message) do
-    case message do
-      %DatabaseEngine.Models.SMS{
-        sender: receiver
-      } ->
-        receiver
-    end
+    Dispatcher.Protocols.DispatcherInfo.get_process_name(message)
+
+    # case message do
+    #   %DatabaseEngine.Models.SMS{
+    #     sender: receiver
+    #   } ->
+    #     receiver
+
+    #   %DatabaseEngine.Models.RadiusPacket{
+    #     attribs: attrs
+    #   } ->
+    #     username_attr_id = 1
+    #     acct_session_id = 44
+    #     acct_multi_session_id = 50
+
+    #     r =
+    #       attrs[username_attr_id] || attrs[acct_session_id] ||
+    #         attrs[acct_multi_session_id]
+
+    #     r
+    # end
   end
 
   def send_messages(messages) do
@@ -87,7 +100,7 @@ defmodule Dispatcher.Process do
     end
   end
 
-  def could_send_to_process_again(msg = %DatabaseEngine.Models.SMS{options: options}) do
+  def could_send_to_process_again(msg = %{options: options}) do
     Logging.debug("Called")
     key_time = "dispatcher_last_send_to_process_time"
     key_try_count = "dispatcher_total_send_try_count"
@@ -108,7 +121,7 @@ defmodule Dispatcher.Process do
         |> Map.put(key_time, Utilities.now() + 1000)
         |> Map.put(key_try_count, try_count + 1)
 
-      r = %DatabaseEngine.Models.SMS{msg | options: new_options}
+      r = %{msg | options: new_options}
       Logging.debug("returns:~p", [r])
       r
     end

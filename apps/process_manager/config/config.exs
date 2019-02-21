@@ -28,3 +28,13 @@ use Mix.Config
 # here (which is why it is important to import them last).
 #
 #     import_config "#{Mix.env()}.exs"
+config(:process_manager, ProcessManager.UnitProcess,
+  wait_to_new_message_timeout_to_hibernate:
+    System.get_env("UNIT_PROCESS_HIBERNATE_TIMEOUT") || 300_000,
+  wait_to_new_message_timeout_to_terminate:
+    System.get_env("UNIT_PROCESS_TERMINATE_TIMEOUT") || 600_000,
+  success_Q: System.get_env("UNIT_PROCESS_SUCCESS_Q") || "unit_process_success_Q",
+  fail_Q: System.get_env("USER_PROCESS_FAIL_Q") || "unit_process_fail_Q",
+  cel_logging_Q: System.get_env("USER_PROCESS_CEL_LOGGING_Q") || "unit_process_logging_Q",
+  cel_script_limitation: [run_timeout: 20_000, http_call_limit: 20]
+)

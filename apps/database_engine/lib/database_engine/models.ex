@@ -113,7 +113,7 @@ defimpl Jason.Encoder,
     DatabaseEngine.Models.RadiusPacket
   ] do
   def encode(struct, opts) do
-    m = Utilities.nested_tuple_to_list(  Map.from_struct(struct))
+    m = Utilities.nested_tuple_to_list(Map.from_struct(struct))
     m = Map.put(m, :__orig_struct__, struct.__struct__)
     Jason.Encode.map(m, opts)
   end
@@ -299,6 +299,7 @@ defmodule DatabaseEngine.Models.Utils do
       %DatabaseEngine.Models.SMS{} -> msg.id
       %DatabaseEngine.Models.Charge.VAS{} -> msg.id
       %DatabaseEngine.Models.OTP.VAS{} -> msg.id
+      %DatabaseEngine.Models.RadiusPacket{id: id} -> id
       v when is_map(v) -> v[:id] or v["id"]
       _ -> nil
     end
@@ -314,6 +315,9 @@ defmodule DatabaseEngine.Models.Utils do
 
       v = %DatabaseEngine.Models.OTP.VAS{} ->
         DatabaseEngine.Models.OTP.VAS
+
+      v = %DatabaseEngine.Models.RadiusPacket{} ->
+        DatabaseEngine.Models.RadiusPacket
 
       v when is_map(v) ->
         v[:__struct__] or v[:__orig_struct__] or v["__struct__"] or v["__orig_struct__"]

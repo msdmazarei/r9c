@@ -18,7 +18,7 @@ use Mix.Config
 #
 # You can also configure a 3rd-party app:
 #
-#     config :logger, level: :info
+config :logger, level: :debug
 #
 
 # It is also possible to import configuration files, relative to this
@@ -33,7 +33,7 @@ import_config "user_process.exs"
 config :dispatcher,
   input_queues: [
     "n2@s1.kafka.local": ["in_dummy", "gsm_ingress"],
-    "n1@s1.kafka.local": ["in_imi", "in_irmtn"]
+    "n1@s1.kafka.local": ["in_imi", "in_irmtn","radius_input_q"]
   ]
 
 config :dispatcher, Dispatcher.Process,

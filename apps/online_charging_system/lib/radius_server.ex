@@ -13,7 +13,7 @@ defmodule OnlineChargingSystem.RadiusServer do
 
   require Utilities.Conversion
 
-  require Dispatcher.Process.VAS.UserProcess.Script
+  # require Dispatcher.Process.VAS.UserProcess.Script
 
   alias Dispatcher.UserProcess.Script
 

@@ -22,6 +22,7 @@ defmodule Dispatcher.Consumers.InQConsumer do
     |> Enum.filter(fn x ->
       case x do
         %DatabaseEngine.Models.SMS{} -> true
+        %DatabaseEngine.Models.RadiusPacket{} -> true
         _ -> false
       end
     end)
