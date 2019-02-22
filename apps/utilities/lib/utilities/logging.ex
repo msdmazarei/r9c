@@ -5,9 +5,10 @@ defmodule Utilities.Logging do
   defmacro debug(message) do
     quote do
       if [
-        DatabaseEngine.DurableQueue,
-        Elixir.Dispatcher.Process,
-        DatabaseEngine.DurableQueue.Deserialize.Map]
+           DatabaseEngine.DurableQueue,
+           Elixir.Dispatcher.Process,
+           DatabaseEngine.DurableQueue.Deserialize.Map
+         ]
          |> Enum.member?(__MODULE__) do
         :ok
       else
@@ -23,9 +24,10 @@ defmodule Utilities.Logging do
   defmacro debug(message, gholi) do
     quote do
       if [
-        DatabaseEngine.DurableQueue,
-        Elixir.Dispatcher.Process,
-         DatabaseEngine.DurableQueue.Deserialize.Map]
+           DatabaseEngine.DurableQueue,
+           Elixir.Dispatcher.Process,
+           DatabaseEngine.DurableQueue.Deserialize.Map
+         ]
          |> Enum.member?(__MODULE__) do
         :ok
       else

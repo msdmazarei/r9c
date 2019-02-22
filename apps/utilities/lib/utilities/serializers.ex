@@ -1,3 +1,15 @@
+defmodule Utilities.Serializers.BinSerializer do
+  require Bertex
+
+  def serialize(obj) do
+    Bertex.encode(obj)
+  end
+
+  def deserialize(bin) do
+    Bertex.safe_decode(bin)
+  end
+end
+
 defmodule Utilities.Serializers.JSONSerializer do
   @moduledoc false
 

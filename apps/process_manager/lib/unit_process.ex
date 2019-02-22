@@ -192,7 +192,6 @@ defmodule ProcessManager.UnitProcess.GeneralUnitProcess do
             Logging.debug("script result: ~p", [script_result])
 
             send_to_queue(
-
               script_result,
               msg,
               state

@@ -3,47 +3,58 @@ defmodule DatabaseEngine.DurableQueue do
 
   require Logger
   require Utilities.Logging
-  require Utilities.Serializers.JSONSerializer
-  alias Utilities.Serializers.JSONSerializer, as: Serializer
+  require Utilities.Serializers.BinSerializer
+  alias Utilities.Serializers.BinSerializer, as: Serializer
   alias Utilities.Logging
 
   @spec serialize(any()) :: String.t() | :nok
   def serialize(obj) do
     Logging.debug("Called.", [])
-    rtn = Utilities.Serializers.JSONSerializer.serialize(obj)
-    Logging.debug("serialized. r:~p", [rtn])
+    Serializer.serialize(obj)
 
-    case rtn do
-      {:ok, serialized} ->
-        Logging.debug("Serialized Successfully, Serialized Result: ~p", [serialized])
-        serialized
+    # rtn = Utilities.Serializers.JSONSerializer.serialize(obj)
+    # Logging.debug("serialized. r:~p", [rtn])
 
-      _ ->
-        Logging.warn("Serializer Retuned unexpected result: #{rtn}. Return :nok")
-        :nok
-    end
+    # case rtn do
+    #   {:ok, serialized} ->
+    #     Logging.debug("Serialized Successfully, Serialized Result: ~p", [serialized])
+    #     serialized
+
+    #   _ ->
+    #     Logging.warn("Serializer Retuned unexpected result: #{rtn}. Return :nok")
+    #     :nok
+    # end
   end
 
   @spec deserialize(String.t()) :: term | nil
   def deserialize(string) do
     Logging.debug("Called with parameters: #{string}")
 
-    case Serializer.deserialize(string) do
-      {:ok, obj} ->
-        Logging.debug("Deserialized Successfully, Returns: ~p", [obj])
-
-        case obj["__orig_struct__"] do
-          nil ->
-            obj
-
-          _ ->
-            DatabaseEngine.DurableQueue.Deserialize.deserialize(obj)
-        end
-
+    try do
+      Serializer.deserialize(string)
+    rescue
       v ->
         Logging.debug("Deserializer Faild, Returned: ~p", [v])
+
         nil
     end
+
+    # case Serializer.deserialize(string) do
+    #   {:ok, obj} ->
+    #     Logging.debug("Deserialized Successfully, Returns: ~p", [obj])
+
+    #     case obj["__orig_struct__"] do
+    #       nil ->
+    #         obj
+
+    #       _ ->
+    #         DatabaseEngine.DurableQueue.Deserialize.deserialize(obj)
+    #     end
+
+    #   v ->
+    #     Logging.debug("Deserializer Faild, Returned: ~p", [v])
+    #     nil
+    # end
   end
 
   @spec enqueue(String.t(), integer(), any) :: :nok | :ok

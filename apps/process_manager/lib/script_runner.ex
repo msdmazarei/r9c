@@ -18,7 +18,7 @@ defmodule ProcessManager.Script do
         _ -> x
       end
     end)
-    |> ProcessManager.Script.Utilities.to_elixir
+    |> ProcessManager.Script.Utilities.to_elixir()
   end
 
   def run_script(
@@ -154,7 +154,17 @@ defmodule ProcessManager.Script do
 
   defp init_lua(msg, additional_functionality \\ %{}) do
     s0 = LUA.init()
-    incoming_message = Utilities.Conversion.nested_map_to_tuple_list(msg)
+
+    incoming_message =
+      Utilities.Conversion.nested_map_to_tuple_list(msg)
+      |> Utilities.nested_tuple_to_list
+      |> Utilities.for_each_non_iterable_item(fn x ->
+        case x do
+          v when is_pid(v) -> :erlang.pid_to_list(v)
+          v -> v
+        end
+      end)
+    Logging.debug("in_msg: ~p converted to: ~p",[msg,incoming_message])
 
     fns = [
       ProcessManager.Script.Functionalities.HTTP.lua_functionalities(),
@@ -167,7 +177,6 @@ defmodule ProcessManager.Script do
       |> Enum.reduce(%{}, fn i, acc ->
         Map.merge(acc, i)
       end)
-
 
     fns_map = Map.merge(fns_map, additional_functionality)
 
@@ -187,7 +196,8 @@ defmodule ProcessManager.Script do
             })
         }
       )
-      # Logging.debug("funcs:~p",[functionalities |> Map.to_list])
+
+    # Logging.debug("funcs:~p",[functionalities |> Map.to_list])
 
     s1 =
       LUA.set_table(

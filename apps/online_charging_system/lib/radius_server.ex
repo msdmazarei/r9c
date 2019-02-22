@@ -47,15 +47,18 @@ defmodule OnlineChargingSystem.RadiusServer do
   end
 
   def reply_result_after_process(spid, pref, st) do
-    spid  = case spid do
-      v when is_binary(v) -> :binary.bin_to_list(v)
-      v when is_list(v) -> v
-    end
+    spid =
+      case spid do
+        v when is_binary(v) -> :binary.bin_to_list(v)
+        v when is_list(v) -> v
+      end
+
     pid = :erlang.list_to_pid(spid)
     pref = Utilities.erl_list_to_iex_string(pref)
+
     case st.last_cel_result do
       {:return, [res]} ->
-        Logging.debug("sending result to main process by id: ~p -> pid:~p", [pref,pid])
+        Logging.debug("sending result to main process by id: ~p -> pid:~p", [pref, pid])
         send(pid, {pref, res})
 
       v ->
@@ -92,7 +95,8 @@ defmodule OnlineChargingSystem.RadiusServer do
           module_name: "Elixir.OnlineChargingSystem.RadiusServer",
           function_name: "reply_result_after_process",
           arguments: [
-            :erlang.pid_to_list(self()), #this should be serializable
+            # this should be serializable
+            :erlang.pid_to_list(self()),
             msgref
           ]
         }
@@ -118,8 +122,8 @@ defmodule OnlineChargingSystem.RadiusServer do
           Logging.debug("main process received processed result:~p", [map_result])
           radius_response(radpkt, map_result["status"], map_result["attribs"])
 
-          v ->
-          Logging.debug("message:~p arrived. we want something else:~p",[v,msgref])
+        v ->
+          Logging.debug("message:~p arrived. we want something else:~p", [v, msgref])
       after
         5000 ->
           Logging.debug("main process did  not received  so exit with no reply")

@@ -25,7 +25,9 @@ defimpl ProcessManager.UnitProcess.Identifier,
 
   def get_script(data = %DatabaseEngine.Models.RadiusPacket{}, _) do
     """
-    return cel.radius.response(2,{})
+    mytable = {}
+    mytable[1]="salam"
+    return cel.radius.response(2, mytable)
     """
   end
 end
