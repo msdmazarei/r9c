@@ -16,7 +16,8 @@ defmodule ProcessManager.UnitProcess.GeneralUnitProcess do
 
       use GenServer
 
-      @module_config Application.get_env(:process_manager, __MODULE__) || Application.get_env(:process_manager, ProcessManager.UnitProcess)
+      @module_config Application.get_env(:process_manager, __MODULE__) ||
+                       Application.get_env(:process_manager, ProcessManager.UnitProcess)
       @wait_to_new_message_timeout_to_hibernate @module_config[
                                                   :wait_to_new_message_timeout_to_hibernate
                                                 ]
@@ -27,7 +28,8 @@ defmodule ProcessManager.UnitProcess.GeneralUnitProcess do
       @check_last_arrived_message_time :check_last_arrived_message_time
 
       defmodule State do
-        @module_config Application.get_env(:process_manager, __MODULE__) || Application.get_env(:process_manager, ProcessManager.UnitProcess)
+        @module_config Application.get_env(:process_manager, __MODULE__) ||
+                         Application.get_env(:process_manager, ProcessManager.UnitProcess)
 
         @derive Jason.Encoder
         defstruct(
@@ -41,7 +43,8 @@ defmodule ProcessManager.UnitProcess.GeneralUnitProcess do
           cel_script_limits: %{
             run_timeout: @module_config[:cel_script_limitation][:run_timeout],
             http_call_limit: @module_config[:cel_script_limitation][:http_call_limit]
-          }
+          },
+          last_cel_result: nil
         )
       end
 
@@ -54,12 +57,11 @@ defmodule ProcessManager.UnitProcess.GeneralUnitProcess do
       #   init(args)
       # end
       def init(args) do
-        Logging.debug("called.",[])
+        Logging.debug("called.", [])
 
         watchdog()
 
-        init_state = %State{
-          last_arrived_message_time: Utilities.now()}
+        init_state = %State{last_arrived_message_time: Utilities.now()}
 
         state =
           Enum.reduce(Map.keys(init_state), init_state, fn item, s ->
@@ -78,13 +80,12 @@ defmodule ProcessManager.UnitProcess.GeneralUnitProcess do
       end
 
       def send_to_queue(result, msg, queue_name)
-      when is_binary(queue_name) or is_bitstring(queue_name)
-      do
+          when is_binary(queue_name) or is_bitstring(queue_name) do
         case DatabaseEngine.DurableQueue.enqueue(queue_name, %{
                "type" => "script_result",
                "module" => __MODULE__,
                "msg" => msg,
-               "script_result" => result,
+               "script_result" => Utilities.nested_tuple_to_list(result),
                "time" => Utilities.now()
              }) do
           :nok ->
@@ -96,19 +97,19 @@ defmodule ProcessManager.UnitProcess.GeneralUnitProcess do
       end
 
       def send_to_queue(
-             {:return, result},
-             msg,
-             %State{queues: %{success_Q: queue_name}}
-           ) do
+            {:return, result},
+            msg,
+            %State{queues: %{success_Q: queue_name}}
+          ) do
         Logging.debug("Called - :success , result is: ~p", [result])
         send_to_queue(result, msg, queue_name)
       end
 
       def send_to_queue(
-             {:error, result},
-             msg,
-             %State{queues: %{fail_Q: queue_name}}
-           ) do
+            {:error, result},
+            msg,
+            %State{queues: %{fail_Q: queue_name}}
+          ) do
         Logging.debug("Called - :error, result is:~p", [result])
 
         result =
@@ -138,6 +139,17 @@ defmodule ProcessManager.UnitProcess.GeneralUnitProcess do
         }
       end
 
+      def callback(
+            data,
+            %DatabaseEngine.Models.InternalCallback{
+              :module_name => module,
+              :function_name => function,
+              :arguments => arguments
+            }
+          ) do
+        Utilities.callback(data, module, function, arguments)
+      end
+
       def handle_call(:alive, _, state) do
         {:reply, true, state}
       end
@@ -164,19 +176,23 @@ defmodule ProcessManager.UnitProcess.GeneralUnitProcess do
         rtn =
           if state.last_10_processed_messages |> Enum.member?(msg.id) do
             Logging.debug("message: ~p already processed.", [msg.id])
-            {:reply, :true, state}
+            {:reply, true, state}
           else
             script = ProcessManager.UnitProcess.Identifier.get_script(msg, state)
-            script_result = ProcessManager.Script.run_script(
-              script,
-              msg,
-              state,
-              %{},
-              state.cel_script_limits.run_timeout || 5000
-            )
-            Logging.debug("script result: ~p",[script_result])
+
+            script_result =
+              ProcessManager.Script.run_script(
+                script,
+                msg,
+                state,
+                %{},
+                state.cel_script_limits.run_timeout || 5000
+              )
+
+            Logging.debug("script result: ~p", [script_result])
 
             send_to_queue(
+
               script_result,
               msg,
               state
@@ -184,10 +200,18 @@ defmodule ProcessManager.UnitProcess.GeneralUnitProcess do
 
             state = %State{
               state
-              | last_arrived_message_time: Utilities.now()
+              | last_arrived_message_time: Utilities.now(),
+                last_cel_result: script_result
             }
 
             state = update_last_10_processed_messages(state, msg)
+
+            Logging.debug("checking for inernal_callback ->~p", [msg.internal_callback])
+
+            if msg.internal_callback != nil do
+              callback(state, msg.internal_callback)
+            end
+
             {:reply, true, state}
           end
 
@@ -203,22 +227,20 @@ defmodule ProcessManager.UnitProcess.GeneralUnitProcess do
         rtn
       end
 
-
       def handle_cast(_msg, state) do
         {:noreply, state}
       end
 
       def handle_info(
             :timeout,
-            state = %State{
-              last_arrived_message_time: last_arrived_message_time}
+            state = %State{last_arrived_message_time: last_arrived_message_time}
           ) do
         Logging.debug("timeout called. last_arrived_message_time:~p", [
           last_arrived_message_time
         ])
 
         if Utilities.now() - last_arrived_message_time > @wait_to_new_message_timeout_to_hibernate do
-          Logging.debug("Enter in Hibernate Mode. Current State:~p", [ state])
+          Logging.debug("Enter in Hibernate Mode. Current State:~p", [state])
           :proc_lib.hibernate(:gen_server, :enter_loop, [__MODULE__, [], state])
         end
 
@@ -233,10 +255,11 @@ defmodule ProcessManager.UnitProcess.GeneralUnitProcess do
           ) do
         Logging.debug(
           " Called. msg:~p With Params Last Arrived Message:~p",
-          [ @check_last_arrived_message_time, last_arrived_message_time]
+          [@check_last_arrived_message_time, last_arrived_message_time]
         )
 
-        if Utilities.now() - last_arrived_message_time >= @wait_to_new_message_timeout_to_terminate do
+        if Utilities.now() - last_arrived_message_time >=
+             @wait_to_new_message_timeout_to_terminate do
           Logging.debug(" Stop process:~p cause of no message after long time, So let stop it", [
             self()
           ])
@@ -256,12 +279,17 @@ defmodule ProcessManager.UnitProcess.GeneralUnitProcess do
       @compile {:inline, watchdog: 0}
 
       def watchdog() do
-        Logging.debug("called. args:~p ~p ~p",[self(),:timeout,@wait_to_new_message_timeout_to_hibernate])
+        Logging.debug("called. args:~p ~p ~p", [
+          self(),
+          :timeout,
+          @wait_to_new_message_timeout_to_hibernate
+        ])
+
         Process.send_after(
           self(),
           :timeout,
           @wait_to_new_message_timeout_to_hibernate + 100
-          )
+        )
 
         Process.send_after(
           self(),

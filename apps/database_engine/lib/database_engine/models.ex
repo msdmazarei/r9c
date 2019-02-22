@@ -158,7 +158,7 @@ defimpl DatabaseEngine.DurableQueue.Deserialize,
               Map.to_list(result.attribs || %{})
               |> Enum.reduce(%{}, fn {k, v}, acc ->
                 case Integer.parse(k) do
-                  {n, ""} when is_number(n) -> acc |> Map.put(n,v)
+                  {n, ""} when is_number(n) -> acc |> Map.put(n, v)
                   #  %{acc | n => v}
                   _ -> %{acc | k => v}
                 end

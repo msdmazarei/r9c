@@ -140,29 +140,47 @@ defmodule Utilities do
   def callback(
         data,
         module,
-        function,
-        arguments \\ []
+        function_name,
+        arguments
       ) do
     try do
-      module =
-        if is_atom(module) == false do
-          String.to_atom(module)
+      module_tocall =
+        case module do
+          v when is_list(v) -> String.to_atom(Utilities.erl_list_to_iex_string(v))
+          v when is_binary(v) -> String.to_atom(v)
+          v when is_bitstring(v) -> String.to_atom(v)
+          v when is_atom(v) -> v
         end
 
-      function =
-        if is_atom(function) == false do
-          String.to_atom(function)
+      Logging.debug("called.....")
+
+      function_tocall =
+        case function_name do
+          v when is_list(v) -> String.to_atom(Utilities.erl_list_to_iex_string(v))
+          v when is_binary(v) -> String.to_atom(v)
+          v when is_bitstring(v) -> String.to_atom(v)
+          v when is_atom(v) -> v
         end
 
+      # if Kernel.is_atom(function_name) == false do
+      #   String.to_atom(function_name)
+      # else
+      #   function_name
+      # end
+
+      Logging.debug("recalc arguments , appending data")
       arguments = arguments ++ [data]
-      Kernel.apply(module, function, arguments)
+
+      Logging.debug("calling module: ~p function:~p args:~p", [module, function_tocall, arguments])
+
+      Kernel.apply(module_tocall, function_tocall, arguments)
     rescue
       e ->
         Logging.error(
           "problem to call module:~p function:~p args:~p error:~p",
           [
             module,
-            function,
+            function_name,
             arguments,
             e
           ]
@@ -171,7 +189,6 @@ defmodule Utilities do
   end
 
   def for_each_non_iterable_item(iter_item, func_to_call) do
-
     f = fn y ->
       for_each_non_iterable_item(y, func_to_call)
     end
@@ -194,7 +211,7 @@ defmodule Utilities do
 
       ii when is_tuple(ii) ->
         li = Tuple.to_list(ii)
-        r1 =for_each_non_iterable_item(li, f)
+        r1 = for_each_non_iterable_item(li, f)
         List.to_tuple(r1)
 
       _ ->

@@ -11,6 +11,7 @@ defmodule Utilities.Conversion do
       end
     end)
   end
+
   def tuple_list_to_map(tp = [{_, _} | _]) when is_list(tp) do
     tp
     |> Enum.map(fn {k, v} ->

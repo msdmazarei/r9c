@@ -18,6 +18,7 @@ defmodule ProcessManager.Script do
         _ -> x
       end
     end)
+    |> ProcessManager.Script.Utilities.to_elixir
   end
 
   def run_script(
@@ -27,8 +28,11 @@ defmodule ProcessManager.Script do
         additional_functionality \\ %{},
         script_run_timeout \\ 5000
       ) do
-    Logging.debug("Called. script_to_run:~p msg:~p user_process_state:~p additional_functionalities:~p timeout:~p",
-    [script_to_run,msg, user_process_state,additional_functionality,script_run_timeout])
+    Logging.debug(
+      "Called. script_to_run:~p msg:~p user_process_state:~p additional_functionalities:~p timeout:~p",
+      [script_to_run, msg, user_process_state, additional_functionality, script_run_timeout]
+    )
+
     main_process_id = self()
     ref = make_ref()
 
@@ -148,7 +152,6 @@ defmodule ProcessManager.Script do
     {[true], state}
   end
 
-
   defp init_lua(msg, additional_functionality \\ %{}) do
     s0 = LUA.init()
     incoming_message = Utilities.Conversion.nested_map_to_tuple_list(msg)
@@ -164,6 +167,7 @@ defmodule ProcessManager.Script do
       |> Enum.reduce(%{}, fn i, acc ->
         Map.merge(acc, i)
       end)
+
 
     fns_map = Map.merge(fns_map, additional_functionality)
 
@@ -181,9 +185,9 @@ defmodule ProcessManager.Script do
             Map.to_list(%{
               "unsub_keys" => ["a", "13", "43", "1234"]
             })
-
         }
       )
+      # Logging.debug("funcs:~p",[functionalities |> Map.to_list])
 
     s1 =
       LUA.set_table(

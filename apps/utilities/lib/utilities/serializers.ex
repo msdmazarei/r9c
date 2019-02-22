@@ -20,7 +20,7 @@ defmodule Utilities.Serializers.JSONSerializer do
 
   @spec serialize(term) :: {:ok, String.t()} | {:error, Exception.t()}
   def serialize(object) do
-    Logging.debug("called",[])
+    Logging.debug("called", [])
     Jason.encode(object)
   end
 

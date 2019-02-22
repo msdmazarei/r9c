@@ -4,7 +4,7 @@ use Mix.Config
 
 config(:online_charging_system, OnlineChargingSystem.RadiusServer, %{
   "n1@s1.kafka.local": [
-    input_Q: System.get_env("RADIUS_IN_Q") || "radius_input_q",
+    input_Q: System.get_env("RADIUS_IN_Q") || "radius_input_q"
   ],
   radius_attribs: %{
     AccessRequest: 1,

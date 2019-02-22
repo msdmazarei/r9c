@@ -1,8 +1,10 @@
 defmodule ProcessManager.Script.Functionalities.Radius do
-
   require Logger
   require Utilities.Logging
   alias Utilities.Logging
+
+  require ProcessManager.Script.Utilities
+  alias ProcessManager.Script.Utilities, as: Script
 
   def lua_functionalities() do
     %{

@@ -28,7 +28,7 @@ defmodule OnlineChargingSystem.RadiusServer do
 
   def get_radius_q() do
     case @conf[node()] do
-      nil ->  nil
+      nil -> nil
       v -> v[:input_Q]
     end
   end
@@ -46,6 +46,23 @@ defmodule OnlineChargingSystem.RadiusServer do
     {:ok, []}
   end
 
+  def reply_result_after_process(spid, pref, st) do
+    spid  = case spid do
+      v when is_binary(v) -> :binary.bin_to_list(v)
+      v when is_list(v) -> v
+    end
+    pid = :erlang.list_to_pid(spid)
+    pref = Utilities.erl_list_to_iex_string(pref)
+    case st.last_cel_result do
+      {:return, [res]} ->
+        Logging.debug("sending result to main process by id: ~p -> pid:~p", [pref,pid])
+        send(pid, {pref, res})
+
+      v ->
+        Logging.debug("unexpected result from server. ignore it: ~p", [v])
+    end
+  end
+
   def request(address, port, packet, state) do
     Logging.debug("request called params , addrss:~p port: ~p satat: ~p", [address, port, state])
     radius_input_q = get_radius_q()
@@ -61,6 +78,8 @@ defmodule OnlineChargingSystem.RadiusServer do
       requestAttributes = :radius_attributes.codec(binattr)
       secret = get_secret_for_nas(address, port)
 
+      msgref = UUID.uuid4()
+
       radpkt = %DatabaseEngine.Models.RadiusPacket{
         address: address,
         port: port,
@@ -68,7 +87,15 @@ defmodule OnlineChargingSystem.RadiusServer do
         id: radius(r, :id),
         code: radius(r, :code),
         attribs: Map.new(requestAttributes),
-        authenticator: radius(r, :authenticator)
+        authenticator: radius(r, :authenticator),
+        internal_callback: %DatabaseEngine.Models.InternalCallback{
+          module_name: "Elixir.OnlineChargingSystem.RadiusServer",
+          function_name: "reply_result_after_process",
+          arguments: [
+            :erlang.pid_to_list(self()), #this should be serializable
+            msgref
+          ]
+        }
       }
 
       radpkt = Utilities.Conversion.replace_all_bins_to_list(radpkt)
@@ -84,6 +111,18 @@ defmodule OnlineChargingSystem.RadiusServer do
       case DurableQueue.enqueue(radius_input_q, radpkt) do
         :nok -> Logging.warn("problem to enqueue radpkt")
         :ok -> :ok
+      end
+
+      receive do
+        {r, map_result} when r == msgref ->
+          Logging.debug("main process received processed result:~p", [map_result])
+          radius_response(radpkt, map_result["status"], map_result["attribs"])
+
+          v ->
+          Logging.debug("message:~p arrived. we want something else:~p",[v,msgref])
+      after
+        5000 ->
+          Logging.debug("main process did  not received  so exit with no reply")
       end
     end
 
@@ -242,61 +281,61 @@ defmodule OnlineChargingSystem.RadiusServer do
     Logging.debug("terminate called. reason: ~p state: ~p", [reason, state])
   end
 
-  def rad_get_attr(args, state) do
-    s = Process.get(:user_process_state)
+  # def rad_get_attr(args, state) do
+  #   s = Process.get(:user_process_state)
 
-    [target_attr] = args
-    target_attr = Kernel.trunc(target_attr)
-    search_result = :radius_attributes.find(target_attr, s[@origRadAttr])
+  #   [target_attr] = args
+  #   target_attr = Kernel.trunc(target_attr)
+  #   search_result = :radius_attributes.find(target_attr, s[@origRadAttr])
 
-    case search_result do
-      {:error, _} ->
-        {[nil], state}
+  #   case search_result do
+  #     {:error, _} ->
+  #       {[nil], state}
 
-      {:ok, v} ->
-        Logging.debug("value:~p", [v])
-        {[Script.to_lua(v)], state}
-    end
-  end
+  #     {:ok, v} ->
+  #       Logging.debug("value:~p", [v])
+  #       {[Script.to_lua(v)], state}
+  #   end
+  # end
 
-  def rad_get_str_attr(args, state) do
-    case rad_get_attr(args, state) do
-      {[nil], s} -> {[nil], s}
-      {[v], s} -> {[Utilities.erl_list_to_iex_string(v)], s}
-    end
-  end
+  # def rad_get_str_attr(args, state) do
+  #   case rad_get_attr(args, state) do
+  #     {[nil], s} -> {[nil], s}
+  #     {[v], s} -> {[Utilities.erl_list_to_iex_string(v)], s}
+  #   end
+  # end
 
-  def rad_response(args, state) do
-    Logging.debug("called. args: ~p", [args])
-    s = Process.get(:user_process_state)
-    [status, attribs] = args
-    attribs = Script.to_elixir(attribs)
+  # def rad_response(args, state) do
+  #   Logging.debug("called. args: ~p", [args])
+  #   s = Process.get(:user_process_state)
+  #   [status, attribs] = args
+  #   attribs = Script.to_elixir(attribs)
 
-    Logging.debug(
-      "attribs:~p",
-      [attribs]
-    )
+  #   Logging.debug(
+  #     "attribs:~p",
+  #     [attribs]
+  #   )
 
-    rtn = %{"attribs" => attribs, "status" => status}
+  #   rtn = %{"attribs" => attribs, "status" => status}
 
-    {[Script.to_lua(rtn)], state}
-  end
+  #   {[Script.to_lua(rtn)], state}
+  # end
 
-  def rad_unhide_password(args, state) do
-    s = Process.get(:user_process_state)
-    [password_attr_id] = args
-    password_attr_id = Kernel.trunc(password_attr_id)
-    secret = s[@parsedRadius].secret
-    authenticator = s[@parsedRadius].authenticator
-    search_result = :radius_attributes.find(password_attr_id, s[@origRadAttr])
+  # def rad_unhide_password(args, state) do
+  #   s = Process.get(:user_process_state)
+  #   [password_attr_id] = args
+  #   password_attr_id = Kernel.trunc(password_attr_id)
+  #   secret = s[@parsedRadius].secret
+  #   authenticator = s[@parsedRadius].authenticator
+  #   search_result = :radius_attributes.find(password_attr_id, s[@origRadAttr])
 
-    case search_result do
-      {:error, _} ->
-        {[nil], state}
+  #   case search_result do
+  #     {:error, _} ->
+  #       {[nil], state}
 
-      {:ok, p} ->
-        passw = :radius_attributes.unhide(secret, authenticator, p)
-        {[Utilities.erl_list_to_iex_string(passw)], state}
-    end
-  end
+  #     {:ok, p} ->
+  #       passw = :radius_attributes.unhide(secret, authenticator, p)
+  #       {[Utilities.erl_list_to_iex_string(passw)], state}
+  #   end
+  # end
 end

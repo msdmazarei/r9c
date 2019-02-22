@@ -11,7 +11,7 @@ defmodule DatabaseEngine.DurableQueue do
   def serialize(obj) do
     Logging.debug("Called.", [])
     rtn = Utilities.Serializers.JSONSerializer.serialize(obj)
-    Logging.debug("serialized. r:~p",[rtn])
+    Logging.debug("serialized. r:~p", [rtn])
 
     case rtn do
       {:ok, serialized} ->
@@ -114,7 +114,7 @@ defmodule DatabaseEngine.DurableQueue do
 
   @spec enqueue(String.t(), any) :: :ok | :nok
   def enqueue(topic_name, object) do
-    Logging.debug("Called with parameters: topic_name:~p object: ~p", [topic_name,object])
+    Logging.debug("Called with parameters: topic_name:~p object: ~p", [topic_name, object])
 
     #    @fixme: increase round-robin process using process dictionary, increamenting by +1
     Logging.debug("calculating kafka topic partitions ...")
@@ -126,13 +126,13 @@ defmodule DatabaseEngine.DurableQueue do
 
     case partitions do
       l when is_list(l) and length(l) > 0 ->
-        Logging.debug("calulated partitions for topic: ~p are: ~p", [topic_name,l])
+        Logging.debug("calulated partitions for topic: ~p are: ~p", [topic_name, l])
         enqueue(topic_name, hd(l), object)
 
       [] ->
         Logging.warn(
           "no partition found for topic: ~p, may be there is no topic. data to enqueue: ~p",
-          [topic_name,object]
+          [topic_name, object]
         )
 
         :ok
@@ -187,7 +187,6 @@ defmodule DatabaseEngine.DurableQueue do
     )
   end
 end
-
 
 defprotocol DatabaseEngine.DurableQueue.Deserialize do
   def deserialize(data)
