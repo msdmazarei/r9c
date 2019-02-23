@@ -33,6 +33,7 @@ defmodule ProcessManager.UnitProcess.GeneralUnitProcess do
 
         @derive Jason.Encoder
         defstruct(
+          process_name: nil,
           last_arrived_message_time: nil,
           last_10_processed_messages: [],
           queues: %{
@@ -44,7 +45,8 @@ defmodule ProcessManager.UnitProcess.GeneralUnitProcess do
             run_timeout: @module_config[:cel_script_limitation][:run_timeout],
             http_call_limit: @module_config[:cel_script_limitation][:http_call_limit]
           },
-          last_cel_result: nil
+          last_cel_result: nil,
+          script_imutable_vars: nil
         )
       end
 
@@ -61,7 +63,18 @@ defmodule ProcessManager.UnitProcess.GeneralUnitProcess do
 
         watchdog()
 
-        init_state = %State{last_arrived_message_time: Utilities.now()}
+        process_name =
+          case args do
+            %{"process_name" => pn} -> pn
+            _ -> "unknown"
+          end
+
+        Process.put(:process_name, process_name)
+
+        init_state = %State{
+          last_arrived_message_time: Utilities.now(),
+          process_name: process_name
+        }
 
         state =
           Enum.reduce(Map.keys(init_state), init_state, fn item, s ->
@@ -127,16 +140,28 @@ defmodule ProcessManager.UnitProcess.GeneralUnitProcess do
       end
 
       def update_last_10_processed_messages(state, msg) do
-        %State{
+        msg_id = ProcessManager.UnitProcess.Identifier.get_identifier(msg)
+
+        s = %State{
           state
           | last_10_processed_messages:
               if state.last_10_processed_messages |> length < 10 do
-                state.last_10_processed_messages ++ [msg.id]
+                state.last_10_processed_messages ++
+                  [
+                    msg_id
+                  ]
               else
                 (state.last_10_processed_messages
-                 |> Enum.slice(1, length(state.last_10_processed_messages) - 1)) ++ [msg.id]
+                 |> Enum.slice(1, length(state.last_10_processed_messages) - 1)) ++ [msg_id]
               end
         }
+
+        Logging.debug("pname:~p -> processed items:~p", [
+          s.process_name,
+          s.last_10_processed_messages
+        ])
+
+        s
       end
 
       def callback(
@@ -167,29 +192,48 @@ defmodule ProcessManager.UnitProcess.GeneralUnitProcess do
       def handle_call(
             {:ingress, msg},
             _from,
-            state = %State{}
+            state = %State{
+              process_name: process_name
+            }
           ) do
         identifier = ProcessManager.UnitProcess.Identifier.get_identifier(msg)
-        Logging.debug("ingress msg :~p arrived", [msg])
-        Logging.debug("id:~p ", [identifier])
+        Logging.debug("pname: ~p -> ingress msg :~p arrived", [process_name, msg])
+        Logging.debug("pname: ~p -> id:~p ", [process_name, identifier])
 
         rtn =
           if state.last_10_processed_messages |> Enum.member?(msg.id) do
-            Logging.debug("message: ~p already processed.", [msg.id])
+            Logging.debug("pname: ~p -> message: ~p already processed.", [process_name, msg.id])
             {:reply, true, state}
           else
             script = ProcessManager.UnitProcess.Identifier.get_script(msg, state)
+
+            new_state =
+              if __MODULE__.__info__(:functions)[:prepare_script_imutable_variables] != nil do
+                script_im_vars =
+                  Kernel.apply(__MODULE__, :prepare_script_imutable_variables, [msg, state])
+
+                %{state | script_imutable_vars: script_im_vars}
+              else
+                state
+              end
+
+            additional_functions =
+              if __MODULE__.__info__(:functions)[:additional_functions] != nil do
+                Kernel.apply(__MODULE__, :additional_functions, [msg, state])
+              else
+                %{}
+              end
 
             script_result =
               ProcessManager.Script.run_script(
                 script,
                 msg,
-                state,
-                %{},
+                new_state,
+                additional_functions,
                 state.cel_script_limits.run_timeout || 5000
               )
 
-            Logging.debug("script result: ~p", [script_result])
+            Logging.debug("pname: ~p -> script result: ~p", [process_name, script_result])
 
             send_to_queue(
               script_result,
@@ -205,7 +249,7 @@ defmodule ProcessManager.UnitProcess.GeneralUnitProcess do
 
             state = update_last_10_processed_messages(state, msg)
 
-            Logging.debug("checking for inernal_callback ->~p", [msg.internal_callback])
+            # Logging.debug("checking for inernal_callback ->~p", [msg.internal_callback])
 
             if msg.internal_callback != nil do
               callback(state, msg.internal_callback)
@@ -214,7 +258,7 @@ defmodule ProcessManager.UnitProcess.GeneralUnitProcess do
             {:reply, true, state}
           end
 
-        Logging.debug("log_event called")
+        Logging.debug("pname :~p log_event called", [process_name])
 
         EventLogger.log_event(
           ModelUtils.get_entity_type(msg),
@@ -232,36 +276,56 @@ defmodule ProcessManager.UnitProcess.GeneralUnitProcess do
 
       def handle_info(
             :timeout,
-            state = %State{last_arrived_message_time: last_arrived_message_time}
+            state = %State{
+              process_name: process_name,
+              last_arrived_message_time: last_arrived_message_time
+            }
           ) do
-        Logging.debug("timeout called. last_arrived_message_time:~p", [
+        Logging.debug("pname:~p -> timeout called. last_arrived_message_time:~p", [
+          process_name,
           last_arrived_message_time
         ])
 
         if Utilities.now() - last_arrived_message_time > @wait_to_new_message_timeout_to_hibernate do
-          Logging.debug("Enter in Hibernate Mode. Current State:~p", [state])
+          Logging.debug("pname: ~p -> Enter in Hibernate Mode. Current State:~p", [
+            process_name,
+            state
+          ])
+
           :proc_lib.hibernate(:gen_server, :enter_loop, [__MODULE__, [], state])
         end
 
-        Logging.debug(" All thing is right, let try hibernating later.", [])
+        Logging.debug("pname:~p ->  All thing is right, let try hibernating later.", [
+          process_name
+        ])
+
         Process.send_after(self(), :timeout, @wait_to_new_message_timeout_to_hibernate + 100)
         {:noreply, state}
       end
 
       def handle_info(
             @check_last_arrived_message_time,
-            state = %State{last_arrived_message_time: last_arrived_message_time}
+            state = %State{
+              process_name: process_name,
+              last_arrived_message_time: last_arrived_message_time
+            }
           ) do
         Logging.debug(
-          " Called. msg:~p With Params Last Arrived Message:~p",
-          [@check_last_arrived_message_time, last_arrived_message_time]
+          " pname: ~p -> Called. msg:~p With Params Last Arrived Message:~p",
+          [process_name, @check_last_arrived_message_time, last_arrived_message_time]
         )
 
         if Utilities.now() - last_arrived_message_time >=
              @wait_to_new_message_timeout_to_terminate do
-          Logging.debug(" Stop process:~p cause of no message after long time, So let stop it", [
-            self()
-          ])
+          Logging.debug(
+            "
+          pname: ~p ->
+          Stop process:~p cause of no message after long time, So let stop it",
+            [
+              process_name,
+              self()
+            ]
+          )
 
           Process.exit(self(), :normal)
         end

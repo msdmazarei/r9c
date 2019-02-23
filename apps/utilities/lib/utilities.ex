@@ -152,7 +152,7 @@ defmodule Utilities do
           v when is_atom(v) -> v
         end
 
-      Logging.debug("called.....")
+      # Logging.debug("called.....")
 
       function_tocall =
         case function_name do
@@ -168,10 +168,10 @@ defmodule Utilities do
       #   function_name
       # end
 
-      Logging.debug("recalc arguments , appending data")
+      # Logging.debug("recalc arguments , appending data")
       arguments = arguments ++ [data]
 
-      Logging.debug("calling module: ~p function:~p args:~p", [module, function_tocall, arguments])
+      # Logging.debug("calling module: ~p function:~p args:~p", [module, function_tocall, arguments])
 
       Kernel.apply(module_tocall, function_tocall, arguments)
     rescue

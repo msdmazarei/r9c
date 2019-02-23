@@ -28,10 +28,10 @@ defmodule ProcessManager.Script do
         additional_functionality \\ %{},
         script_run_timeout \\ 5000
       ) do
-    Logging.debug(
-      "Called. script_to_run:~p msg:~p user_process_state:~p additional_functionalities:~p timeout:~p",
-      [script_to_run, msg, user_process_state, additional_functionality, script_run_timeout]
-    )
+    # Logging.debug(
+    #   "Called. script_to_run:~p msg:~p user_process_state:~p additional_functionalities:~p timeout:~p",
+    #   [script_to_run, msg, user_process_state, additional_functionality, script_run_timeout]
+    # )
 
     main_process_id = self()
     ref = make_ref()
@@ -154,17 +154,37 @@ defmodule ProcessManager.Script do
 
   defp init_lua(msg, additional_functionality \\ %{}) do
     s0 = LUA.init()
+    # configure package.path to retrive packages
+    s0 =
+      case :os.get_env_var('LUA_LOAD_PATH') do
+        false ->
+          s0
 
+        v ->
+          pathes =
+            Path.join(v, '?.lua') <> ";" <> Path.join(v, '?/init.lua')
+
+          Logging.debug("pathes:~p", [pathes])
+
+          r=:luerl.set_table([:package, :path], pathes, s0)
+          Logging.debug("new package.path configed")
+          r
+      end
+
+
+    # Logging.debug("path:~p",[:luerl.get_table([:package,:path],s0)])
     incoming_message =
-      Utilities.Conversion.nested_map_to_tuple_list(msg)
-      |> Utilities.nested_tuple_to_list
+      msg
+      |> Utilities.nested_tuple_to_list()
       |> Utilities.for_each_non_iterable_item(fn x ->
         case x do
           v when is_pid(v) -> :erlang.pid_to_list(v)
           v -> v
         end
       end)
-    Logging.debug("in_msg: ~p converted to: ~p",[msg,incoming_message])
+      |> Utilities.Conversion.nested_map_to_tuple_list()
+
+    # Logging.debug("in_msg: ~p converted to: ~p",[msg,incoming_message])
 
     fns = [
       ProcessManager.Script.Functionalities.HTTP.lua_functionalities(),

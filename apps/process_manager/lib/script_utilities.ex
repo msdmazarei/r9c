@@ -10,20 +10,36 @@ defmodule ProcessManager.Script.Utilities do
   end
 
   def to_elixir(var) when is_list(var) do
-    if Utilities.is_list_of_tuples(var) do
-      v1 =
-        var
-        |> Enum.map(fn {k, v} ->
-          {k, to_elixir(v)}
-        end)
+    r =
+      if Utilities.is_list_of_tuples(var) do
+        v1 =
+          var
+          |> Enum.map(fn {k, v} ->
+            {k, to_elixir(v)}
+          end)
 
-      Map.new(v1)
-    else
-      var
-      |> Enum.map(fn x ->
-        to_elixir(x)
-      end)
-    end
+        Map.new(v1)
+      else
+        var
+        |> Enum.map(fn x ->
+          to_elixir(x)
+        end)
+      end
+
+    r
+    |> Utilities.for_each_non_iterable_item(fn x ->
+      case x do
+        v when is_float(v) ->
+          if Kernel.trunc(v) == v do
+            Kernel.trunc(v)
+          else
+            v
+          end
+
+        v ->
+          v
+      end
+    end)
   end
 
   def to_elixir(var) when is_number(var) or is_bitstring(var) do

@@ -11,7 +11,14 @@ defimpl ProcessManager.UnitProcess.Identifier,
     DatabaseEngine.Models.RadiusPacket
   ] do
   def get_identifier(data = %DatabaseEngine.Models.RadiusPacket{}) do
-    :io_lib.format("~p-~p", [data.authenticator, data.id])
+    md5 =
+      :crypto.hash(
+        :md5,
+        data |> Utilities.Serializers.BinSerializer.serialize()
+      )
+      |> Base.encode16()
+
+    Utilities.erl_list_to_iex_string(:io_lib.format("id:~p-s:~s", [data.id, md5]))
   end
 
   def get_process_name(data = %DatabaseEngine.Models.RadiusPacket{}) do
@@ -25,9 +32,61 @@ defimpl ProcessManager.UnitProcess.Identifier,
 
   def get_script(data = %DatabaseEngine.Models.RadiusPacket{}, _) do
     """
-    mytable = {}
-    mytable[1]="salam"
-    return cel.radius.response(2, mytable)
+
+    function dump(o)
+      if type(o) == 'table' then
+          local s = '{ '
+          for k,v in pairs(o) do
+            if type(k) ~= 'number' then k = '"'..k..'"' end
+            s = s .. '['..k..'] = ' .. dump(v) .. ','
+          end
+          return s .. '} '
+      else
+          return tostring(o)
+      end
+    end
+
+
+  function mikrotik_response()
+
+  end
+
+
+
+  function authentication()
+  print("authenticate called.")
+  cel = _G.cel
+  print("incoming message: ", dump(cel.incoming_message))
+
+  r_username_attr = 1
+
+  r_framed_protocol_attr = 7
+
+  framed_protocol_ppp_val = 1
+
+  r_framed_comporession = 13
+
+  framed_compression_van_jacobsen_tcp_ip_val = 1
+
+
+  auth_response = {}
+  auth_response[r_framed_protocol_attr] = cel.radius.int_attr( framed_protocol_ppp_val , 4 )
+  auth_response[r_framed_comporession ] = cel.radius.int_attr( framed_compression_van_jacobsen_tcp_ip_val, 4)
+
+  username = cel.radius.get_str_attr( r_username_attr )
+
+
+  return cel.radius.response(2, auth_response)
+  end
+
+
+
+
+    if (cel.incoming_message.code == 1 ) then
+      return authentication()
+    end
+
+
     """
   end
 end

@@ -426,7 +426,7 @@ defmodule Dispatcher.Process do
            selected_node,
            Dispatcher.Process,
            :start_local_gen_server,
-           [module, %{"cell_no" => name}],
+           [module, %{"process_name" => name}],
            @process_creation_timeout
          ) do
       {:badrpc, reason} ->

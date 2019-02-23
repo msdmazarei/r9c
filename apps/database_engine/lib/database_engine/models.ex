@@ -103,102 +103,102 @@ defmodule DatabaseEngine.Models.OTP.VAS do
             otp_type: nil
 end
 
-defimpl Jason.Encoder,
-  for: [
-    DatabaseEngine.Models.SMS,
-    DatabaseEngine.Models.OTP.VAS,
-    DatabaseEngine.Models.OTP.VAS.IMI_GW_OPTS,
-    DatabaseEngine.Models.InternalCallback,
-    DatabaseEngine.Models.Charge.VAS,
-    DatabaseEngine.Models.RadiusPacket
-  ] do
-  def encode(struct, opts) do
-    m = Utilities.nested_tuple_to_list(Map.from_struct(struct))
-    m = Map.put(m, :__orig_struct__, struct.__struct__)
-    Jason.Encode.map(m, opts)
-  end
-end
+# defimpl Jason.Encoder,
+#   for: [
+#     DatabaseEngine.Models.SMS,
+#     DatabaseEngine.Models.OTP.VAS,
+#     DatabaseEngine.Models.OTP.VAS.IMI_GW_OPTS,
+#     DatabaseEngine.Models.InternalCallback,
+#     DatabaseEngine.Models.Charge.VAS,
+#     DatabaseEngine.Models.RadiusPacket
+#   ] do
+#   def encode(struct, opts) do
+#     m = Utilities.nested_tuple_to_list(Map.from_struct(struct))
+#     m = Map.put(m, :__orig_struct__, struct.__struct__)
+#     Jason.Encode.map(m, opts)
+#   end
+# end
 
-defimpl DatabaseEngine.DurableQueue.Deserialize,
-  for: [Map] do
-  require Logger
-  require Utilities.Logging
-  alias Utilities.Logging
+# defimpl DatabaseEngine.DurableQueue.Deserialize,
+#   for: [Map] do
+#   require Logger
+#   require Utilities.Logging
+#   alias Utilities.Logging
 
-  def deserialize(data) do
-    data =
-      if is_map(data) do
-        new_data =
-          Enum.reduce(Map.to_list(data), %{}, fn {k, v}, acc ->
-            new_v =
-              if is_map(v) and v["__orig_struct__"] != nil do
-                DatabaseEngine.DurableQueue.Deserialize.deserialize(v)
-              else
-                v
-              end
+#   def deserialize(data) do
+#     data =
+#       if is_map(data) do
+#         new_data =
+#           Enum.reduce(Map.to_list(data), %{}, fn {k, v}, acc ->
+#             new_v =
+#               if is_map(v) and v["__orig_struct__"] != nil do
+#                 DatabaseEngine.DurableQueue.Deserialize.deserialize(v)
+#               else
+#                 v
+#               end
 
-            Map.put(acc, k, new_v)
-          end)
+#             Map.put(acc, k, new_v)
+#           end)
 
-        new_data
-      else
-        data
-      end
+#         new_data
+#       else
+#         data
+#       end
 
-    Logging.debug("data:~p", [data])
+#     Logging.debug("data:~p", [data])
 
-    struct_name = String.to_atom(data["__orig_struct__"])
-    result = Utilities.to_struct(struct_name, data)
+#     struct_name = String.to_atom(data["__orig_struct__"])
+#     result = Utilities.to_struct(struct_name, data)
 
-    case struct_name do
-      DatabaseEngine.Models.RadiusPacket ->
-        result = %{
-          result
-          | attribs:
-              Map.to_list(result.attribs || %{})
-              |> Enum.reduce(%{}, fn {k, v}, acc ->
-                case Integer.parse(k) do
-                  {n, ""} when is_number(n) -> acc |> Map.put(n, v)
-                  #  %{acc | n => v}
-                  _ -> %{acc | k => v}
-                end
-              end)
-        }
+#     case struct_name do
+#       DatabaseEngine.Models.RadiusPacket ->
+#         result = %{
+#           result
+#           | attribs:
+#               Map.to_list(result.attribs || %{})
+#               |> Enum.reduce(%{}, fn {k, v}, acc ->
+#                 case Integer.parse(k) do
+#                   {n, ""} when is_number(n) -> acc |> Map.put(n, v)
+#                   #  %{acc | n => v}
+#                   _ -> %{acc | k => v}
+#                 end
+#               end)
+#         }
 
-      DatabaseEngine.Models.SMS ->
-        f = fn key, val ->
-          if ["imi_charge_code", "imi_short_code", "imi_service_key", "imi_sms_type"]
-             |> Enum.member?(key) do
-            {String.to_atom(key), val}
-          else
-            {key, val}
-          end
-        end
+#       DatabaseEngine.Models.SMS ->
+#         f = fn key, val ->
+#           if ["imi_charge_code", "imi_short_code", "imi_service_key", "imi_sms_type"]
+#              |> Enum.member?(key) do
+#             {String.to_atom(key), val}
+#           else
+#             {key, val}
+#           end
+#         end
 
-        correct_options = for {key, val} <- result.options, into: %{}, do: f.(key, val)
+#         correct_options = for {key, val} <- result.options, into: %{}, do: f.(key, val)
 
-        correct_options =
-          case correct_options[:imi_sms_type] do
-            nil ->
-              correct_options
+#         correct_options =
+#           case correct_options[:imi_sms_type] do
+#             nil ->
+#               correct_options
 
-            _ ->
-              Map.put(
-                correct_options,
-                :imi_sms_type,
-                String.to_atom(correct_options[:imi_sms_type])
-              )
-          end
+#             _ ->
+#               Map.put(
+#                 correct_options,
+#                 :imi_sms_type,
+#                 String.to_atom(correct_options[:imi_sms_type])
+#               )
+#           end
 
-        Logging.debug("options:~p", [correct_options])
+#         Logging.debug("options:~p", [correct_options])
 
-        %DatabaseEngine.Models.SMS{result | options: correct_options}
+#         %DatabaseEngine.Models.SMS{result | options: correct_options}
 
-      _ ->
-        result
-    end
-  end
-end
+#       _ ->
+#         result
+#     end
+#   end
+# end
 
 defmodule DatabaseEngine.Struct.AuthUser do
   @moduledoc """
@@ -334,7 +334,7 @@ defmodule DatabaseEngine.Models.Utils do
         DatabaseEngine.Models.RadiusPacket
 
       v when is_map(v) ->
-        v[:__struct__] or v[:__orig_struct__] or v["__struct__"] or v["__orig_struct__"]
+        v[:__struct__] || v[:__orig_struct__] || v["__struct__"] || v["__orig_struct__"]
 
       _ ->
         nil
