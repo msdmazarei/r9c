@@ -5,7 +5,7 @@ defmodule ProcessManager.Script do
 
   alias Utilities.Logging
   alias :luerl, as: LUA
-
+  @lua_module_path Application.get_env(:process_manager,__MODULE__ )[:lua_modules_path]
   @orig_message_key :orig_message_key
   @spec run_script(String.t(), any(), any(), integer()) ::
           {:return, any()} | {:error, any()}
@@ -32,7 +32,10 @@ defmodule ProcessManager.Script do
     #   "Called. script_to_run:~p msg:~p user_process_state:~p additional_functionalities:~p timeout:~p",
     #   [script_to_run, msg, user_process_state, additional_functionality, script_run_timeout]
     # )
+    script_to_run =
+      "package.path = package.path .. \";" <> (@lua_module_path || "") <> "\"\n" <> script_to_run
 
+    Logging.debug("script to run:~p", [script_to_run])
     main_process_id = self()
     ref = make_ref()
 
@@ -161,16 +164,14 @@ defmodule ProcessManager.Script do
           s0
 
         v ->
-          pathes =
-            Path.join(v, '?.lua') <> ";" <> Path.join(v, '?/init.lua')
+          pathes = Path.join(v, '?.lua') <> ";" <> Path.join(v, '?/init.lua')
 
           Logging.debug("pathes:~p", [pathes])
 
-          r=:luerl.set_table([:package, :path], pathes, s0)
+          r = :luerl.set_table([:package, :path], pathes, s0)
           Logging.debug("new package.path configed")
           r
       end
-
 
     # Logging.debug("path:~p",[:luerl.get_table([:package,:path],s0)])
     incoming_message =

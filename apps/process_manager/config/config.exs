@@ -28,6 +28,7 @@ use Mix.Config
 # here (which is why it is important to import them last).
 #
 #     import_config "#{Mix.env()}.exs"
+import_config("lua_module.exs")
 config(:process_manager, ProcessManager.UnitProcess,
   wait_to_new_message_timeout_to_hibernate:
     System.get_env("UNIT_PROCESS_HIBERNATE_TIMEOUT") || 300_000,
@@ -38,3 +39,5 @@ config(:process_manager, ProcessManager.UnitProcess,
   cel_logging_Q: System.get_env("USER_PROCESS_CEL_LOGGING_Q") || "unit_process_logging_Q",
   cel_script_limitation: [run_timeout: 20_000, http_call_limit: 20]
 )
+
+
