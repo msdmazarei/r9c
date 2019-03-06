@@ -23,6 +23,7 @@ defmodule Dispatcher.Consumers.InQConsumer do
       case x do
         %DatabaseEngine.Models.SMS{} -> true
         %DatabaseEngine.Models.RadiusPacket{} -> true
+        %DatabaseEngine.Models.DiameterPacket{} -> true
         _ -> false
       end
     end)

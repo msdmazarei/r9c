@@ -28,7 +28,6 @@ defmodule DatabaseEngine.Models.DiameterPacket do
             parsed_packet: %Utilities.Parsers.Diameter.DiameterPacket{},
             options: %{},
             internal_callback: nil
-
 end
 
 defmodule DatabaseEngine.Models.SMS do
@@ -326,6 +325,7 @@ defmodule DatabaseEngine.Models.Utils do
       %DatabaseEngine.Models.Charge.VAS{} -> msg.id
       %DatabaseEngine.Models.OTP.VAS{} -> msg.id
       %DatabaseEngine.Models.RadiusPacket{id: id} -> id
+      %DatabaseEngine.Models.DiameterPacket{id: id} -> id
       v when is_map(v) -> v[:id] or v["id"]
       _ -> nil
     end
@@ -344,6 +344,9 @@ defmodule DatabaseEngine.Models.Utils do
 
       v = %DatabaseEngine.Models.RadiusPacket{} ->
         DatabaseEngine.Models.RadiusPacket
+
+      v = %DatabaseEngine.Models.DiameterPacket{} ->
+        DatabaseEngine.Models.DiameterPacket
 
       v when is_map(v) ->
         v[:__struct__] || v[:__orig_struct__] || v["__struct__"] || v["__orig_struct__"]
