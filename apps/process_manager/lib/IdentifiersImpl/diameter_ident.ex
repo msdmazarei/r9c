@@ -17,11 +17,19 @@ defimpl ProcessManager.UnitProcess.Identifier,
         }
       },
       "default" => %{
-        1 => %{
+        1 => %{ #for NASREQ application
           "process_name" => %{
             "type" => "avp",
-            "avp_code" => 1
+            "avp_code" => 1 #specifies UserName AVP
           }
+        },
+        "default" => %{ #for any app which not specified here
+          "process_name" => %{ #process name calculation
+              "type"=> "avp", # says calculate process name by avp is contaid in packet
+              "avp_code" => 1 # avp code which specifies process name here for NASREQ packet means USERNAME
+
+          }
+
         }
       }
     }
