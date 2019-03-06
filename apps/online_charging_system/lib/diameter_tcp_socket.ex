@@ -5,6 +5,9 @@ defmodule OnlineChargingSystem.Servers.Diameter.TcpSocket do
 
   require Utilities.Conversion
 
+  require DatabaseEngine.Models.DiameterPacket
+  require DatabaseEngine.Models.InternalCallback
+
   @tcp_recv_timeout 30_000
 
   @compile {:inline, get_peer_ip_address_as_string: 1}
@@ -37,7 +40,6 @@ defmodule OnlineChargingSystem.Servers.Diameter.TcpSocket do
     # config has hirarchy structer as below:
     # { server_ip => { application_id => { user_process_name => %{"queue": "1" }}}}
     diameter_server_config = %{
-
       "192.168.1.1" => %{},
       "default" => %{
         "default" => %{
@@ -61,7 +63,17 @@ defmodule OnlineChargingSystem.Servers.Diameter.TcpSocket do
     Utilities.Conversion.ip_address_tuple_to_string(client_ip_address_tuple)
   end
 
+  def send_response_back_to_client(pid, packet_bin_to_send) do
+    Logger.debug("Called. with params pid:~p packet_bin_to_send:~p",[
+      pid,packet_bin_to_send
+    ])
+    # send pid, packet_bin_to_send
+  end
+
   def server_diameter_client(client, client_config, buf \\ <<>>) do
+    {:ok, {client_ip_tuple, client_port}} = :inet.peername(client)
+    client_ip_address_string = Utilities.Conversion.ip_address_tuple_to_string(client_ip_tuple)
+
     Logging.debug("waiting to  new data from client. old-buf-len:~p", [byte_size(buf)])
 
     case :gen_tcp.recv(client, 0, @tcp_recv_timeout) do
@@ -77,9 +89,30 @@ defmodule OnlineChargingSystem.Servers.Diameter.TcpSocket do
         dia_packets
         |> Enum.map(fn x ->
           qn = get_queue_name_for_dia_packet(client, client_config, x)
+
           if qn != nil do
-            Logging.debug("enqueue packet to q:~p",[qn])
-            :ok = DatabaseEngine.DurableQueue.enqueue(qn, x)
+            Logging.debug("enqueue packet to q:~p", [qn])
+
+            diameter_struct = %DatabaseEngine.Models.DiameterPacket{
+
+              id: UUID.uuid1(),
+              client_address: client_ip_address_string,
+              client_port: client_port,
+              capture_timestamp: Utilities.now(),
+              packet_bin: x,
+              options: %{},
+              internal_callback: %DatabaseEngine.Models.InternalCallback {
+                module_name: __MODULE__,
+                function_name: "send_response_back_to_client",
+                arguments: [self()]
+              }
+            }
+
+            :ok =
+              DatabaseEngine.DurableQueue.enqueue(
+                qn,
+                diameter_struct
+              )
           end
         end)
 
@@ -124,14 +157,18 @@ defmodule OnlineChargingSystem.Servers.Diameter.TcpSocket do
     Logging.debug("Called.")
     <<_::binary-size(8), application_id::size(32), _::binary>> = diameter_bin_packet
     application_config = client_conf[application_id] || client_conf["default"]
+
     if application_config != nil do
       if application_config["queue"] != nil do
         application_config["queue"]
       else
-        Logging.warn("no queue definition found in existing config(bad config) for client:~p and application_id:~p", [
-          get_peer_ip_address_as_string(client),
-          application_id
-        ])
+        Logging.warn(
+          "no queue definition found in existing config(bad config) for client:~p and application_id:~p",
+          [
+            get_peer_ip_address_as_string(client),
+            application_id
+          ]
+        )
 
         nil
       end

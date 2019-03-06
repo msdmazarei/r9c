@@ -19,6 +19,16 @@ defmodule DatabaseEngine.Models.RadiusPacket do
             internal_callback: nil
 end
 
+defmodule DatabaseEngine.Models.DiameterPacket do
+  defstruct id: nil,
+            client_address: nil,
+            client_port: nil,
+            capture_timestamp: nil,
+            packet_bin: <<>>,
+            options: %{},
+            internal_callback: nil
+end
+
 defmodule DatabaseEngine.Models.SMS do
   @moduledoc false
   defstruct sender: nil,
