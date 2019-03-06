@@ -1,6 +1,7 @@
 defmodule Utilities.Conversion do
   @moduledoc false
   require Utilities
+  require Record
 
   def replace_all_bins_to_list(obj) do
     Utilities.for_each_non_iterable_item(obj, fn x ->
@@ -62,5 +63,26 @@ defmodule Utilities.Conversion do
 
       {k, r}
     end)
+  end
+
+  def record_to_map(record) when Record.is_record(record) do
+    record_name = record |> elem(0)
+
+    mod_name =
+      case record_name do
+        :diameter_packet ->
+          OnlineChargingSystem.Records.Diameter
+      end
+
+    Kernel.apply(mod_name, :record_to_map, [record])
+  end
+
+  # def map_to_record(record_kind, map) do
+  #   Utilities.Conversion.Protocols.RecordMapConversion.map_to_record(record_kind, map)
+  # end
+
+  @compile {:inline, ip_address_tuple_to_string: 1}
+  def ip_address_tuple_to_string(ip_address_tuple) when is_tuple(ip_address_tuple) do
+    Utilities.erl_list_to_iex_string(:inet_parse.ntoa(ip_address_tuple))
   end
 end

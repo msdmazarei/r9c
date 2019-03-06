@@ -65,4 +65,69 @@ defmodule OnlineChargingSystem.Servers.DiameterServer do
 
     :diameter.add_transport(svc_name, {:listen, t_options})
   end
+
+
+
+
+  def tcp_cap() do
+    {:diameter_service, self(),
+     {:diameter_caps, <<"diaserver.msd">>, <<"diaserver.msd">>, [], 3_285_213, <<"RCobra OCS">>,
+      [], [50386, 13], [1, 4], [], [0, 167_772_151, 1, 4], [], [1], []},
+     [
+       {:diameter_app, :base, :diameter_gen_base_rfc6733,
+        ['Elixir.OnlineChargingSystem.Servers.DiameterCallbackApp'], %{}, 0, false,
+        [{:answer_errors, :discard}, {:request_errors, :answer_3xxx}]},
+       {:diameter_app, :nas_application, :diameter_gen_nas_application_rfc7155,
+        ['Elixir.OnlineChargingSystem.Servers.DiameterCallbackApp'], %{}, 1, false,
+        [{:answer_errors, :discard}, {:request_errors, :answer_3xxx}]},
+       {:diameter_app, :ro_3gpp, :diameter_gen_3gpp_ro_application,
+        ['Elixir.OnlineChargingSystem.Servers.DiameterCallbackApp'], %{}, 4, false,
+        [{:answer_errors, :discard}, {:request_errors, :answer_3xxx}]},
+       {:diameter_app, :cc, :diameter_gen_msd_application,
+        ['Elixir.OnlineChargingSystem.Servers.DiameterCallbackApp'], %{}, 167_772_151, false,
+        [
+          {:answer_errors, :discard},
+          {:request_errors, :answer_3xxx}
+        ]}
+     ]}
+  end
+
+  def w8_message() do
+    Logging.debug("waiting for message")
+
+    receive do
+      x ->
+        Logging.debug("messge arrgivedx:~p", [x])
+        # code
+    end
+
+    w8_message()
+  end
+
+  def only_start_transport_tcp() do
+    Process.spawn(
+      fn ->
+        { :ok, r} = :diameter.add_transport(
+          :nas_application,
+          {:listen,
+           [
+             {:transport_module, :diameter_tcp},
+             {:transport_config, [{:reuseaddr, true}, {:ip, {127, 0, 0, 1}}, {:port, 3868}]}
+           ]}
+        )
+
+        res =
+          :diameter_tcp.start(
+            {:accept, r},
+            tcp_cap(),
+            [{:reuseaddr, true}, {:ip, {127, 0, 0, 1}}, {:port, 3868}]
+          )
+
+        Logging.debug("resilt of tcp: ~p", [res])
+        w8_message()
+      end,
+      []
+    )
+  end
+
 end
