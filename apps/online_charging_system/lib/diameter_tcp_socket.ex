@@ -100,6 +100,7 @@ defmodule OnlineChargingSystem.Servers.Diameter.TcpSocket do
               client_port: client_port,
               capture_timestamp: Utilities.now(),
               packet_bin: x,
+              parsed_packet: Utilities.Parsers.Diameter.parse_from_bin(x),
               options: %{},
               internal_callback: %DatabaseEngine.Models.InternalCallback {
                 module_name: __MODULE__,
@@ -182,36 +183,4 @@ defmodule OnlineChargingSystem.Servers.Diameter.TcpSocket do
     end
   end
 
-  defp parse_diameter_packet__old(diameter_bin_packet, diameter_application_map)
-       when is_binary(diameter_bin_packet) and is_map(diameter_application_map) do
-    Logging.debug("called, in: ~p", [diameter_bin_packet])
-    <<_::binary-size(8), application_id::size(32), _::binary>> = diameter_bin_packet
-    Logging.debug("extracted application_id:~p", [application_id])
-
-    case diameter_application_map[application_id] do
-      nil ->
-        Logging.debug("no diameter packet found in config")
-        nil
-
-      v ->
-        Logging.debug("diameter packet parser module for this packet is: ~p", [v])
-
-        r =
-          :diameter_codec.decode(
-            v,
-            %{
-              :app_dictionary => v,
-              :decode_format => :record,
-              :module => v,
-              :failed_avp => false
-            },
-            diameter_bin_packet
-          )
-
-        :io.fwrite("~p", [r])
-
-        Logging.debug("decoded record:~p", [r])
-        r
-    end
-  end
 end

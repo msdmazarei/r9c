@@ -25,8 +25,10 @@ defmodule DatabaseEngine.Models.DiameterPacket do
             client_port: nil,
             capture_timestamp: nil,
             packet_bin: <<>>,
+            parsed_packet: %Utilities.Parsers.Diameter.DiameterPacket{},
             options: %{},
             internal_callback: nil
+
 end
 
 defmodule DatabaseEngine.Models.SMS do
