@@ -102,11 +102,13 @@ defmodule OnlineChargingSystem.Servers.Diameter.TcpSocket do
               packet_bin: x,
               parsed_packet: Utilities.Parsers.Diameter.parse_from_bin(x),
               options: %{},
-              internal_callback: %DatabaseEngine.Models.InternalCallback {
-                module_name: __MODULE__,
-                function_name: "send_response_back_to_client",
-                arguments: [self()]
-              }
+              internal_callback: nil
+
+              # %DatabaseEngine.Models.InternalCallback {
+              #   module_name: __MODULE__,
+              #   function_name: "send_response_back_to_client",
+              #   arguments: [self()]
+              # }
             }
 
             :ok =

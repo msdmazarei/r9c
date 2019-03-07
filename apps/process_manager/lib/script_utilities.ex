@@ -1,4 +1,7 @@
 defmodule ProcessManager.Script.Utilities do
+  require Logger
+  require Utilities.Logging
+  alias Utilities.Logging
   def to_lua(var) when is_number(var) or is_binary(var) do
     var
   end
@@ -9,6 +12,9 @@ defmodule ProcessManager.Script.Utilities do
     v2
   end
 
+  def to_elixir(nil) do
+    nil
+  end
   def to_elixir(var) when is_list(var) do
     r =
       if Utilities.is_list_of_tuples(var) do
@@ -44,5 +50,9 @@ defmodule ProcessManager.Script.Utilities do
 
   def to_elixir(var) when is_number(var) or is_bitstring(var) do
     var
+  end
+  def to_elixir(any) do
+    Logging.debug("called with arg:~p",[any])
+    any
   end
 end

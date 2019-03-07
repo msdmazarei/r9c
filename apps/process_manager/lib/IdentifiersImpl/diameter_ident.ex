@@ -109,7 +109,9 @@ defimpl ProcessManager.UnitProcess.Identifier,
     print("diameter script called.")
     local utils = require("utils")
     utils.check_module()
-    utils.dump(cel.incoming_message)
+    -- print(utils.dump(cel.incoming_message))
+    print("application id: ",cel.incoming_message.parsed_packet.application_id)
+    return true
     """
   end
 end
