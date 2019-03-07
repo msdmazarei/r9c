@@ -2,6 +2,10 @@ defimpl ProcessManager.UnitProcess.Identifier,
   for: [
     DatabaseEngine.Models.RadiusPacket
   ] do
+  def get_process_module(%DatabaseEngine.Models.RadiusPacket{}) do
+    ProcessManager.Process.RadiusProcess
+  end
+
   def get_identifier(data = %DatabaseEngine.Models.RadiusPacket{}) do
     md5 =
       :crypto.hash(

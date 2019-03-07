@@ -12,22 +12,25 @@ defmodule Dispatcher.Consumers.InQConsumer do
 
   # note - messages are delivered in batches
   def handle_message_set(message_set, state) do
-    Logging.debug("Called")
+    Logging.debug("Called. message_set legth:~p", [message_set |> length])
 
-    message_set
-    |> Enum.map(fn %Message{value: x} ->
-      x |> DurableQueue.deserialize()
-    end)
-    # only messages will send to send_messages other will ignore
-    |> Enum.filter(fn x ->
-      case x do
-        %DatabaseEngine.Models.SMS{} -> true
-        %DatabaseEngine.Models.RadiusPacket{} -> true
-        %DatabaseEngine.Models.DiameterPacket{} -> true
-        _ -> false
-      end
-    end)
-    |> Dispatcher.Process.send_messages()
+    to_send_message =
+      message_set
+      |> Enum.map(fn %Message{value: x} ->
+        x |> DurableQueue.deserialize()
+      end)
+      # only messages will send to send_messages other will ignore
+      |> Enum.filter(fn x ->
+        case x do
+          %DatabaseEngine.Models.SMS{} -> true
+          %DatabaseEngine.Models.RadiusPacket{} -> true
+          %DatabaseEngine.Models.DiameterPacket{} -> true
+          _ -> false
+        end
+      end)
+
+    Logging.debug("call send messages by messages len:~p", [to_send_message |> length])
+    Dispatcher.Process.send_messages(to_send_message)
 
     {:async_commit, state}
   end

@@ -6,9 +6,13 @@ defimpl ProcessManager.UnitProcess.Identifier,
   require Utilities.Logging
   alias Utilities.Logging
 
+  def get_process_module(%DatabaseEngine.Models.DiameterPacket{}) do
+    ProcessManager.Process.DiameterProcess
+  end
+
   def get_config_for_client(client_address) do
     main_config = %{
-      "127.0.0.1" => %{
+      "117.0.0.2" => %{
         1 => %{
           "process_name" => %{
             "type" => "avp",
@@ -75,7 +79,7 @@ defimpl ProcessManager.UnitProcess.Identifier,
             Logging.debug("process name calculated successfully. it is: ~p", [pname])
             pname
           else
-            Logging.debug("no target avp (~p) found in packetd avps. return nil ", [avp_to_find])
+            Logging.debug("no target avp (~p) found in packetd avps . return nil ", [avp_to_find])
             nil
           end
         else
@@ -101,6 +105,11 @@ defimpl ProcessManager.UnitProcess.Identifier,
   end
 
   def get_script(_data, _state) do
-    ""
+    """
+    print("diameter script called.")
+    local utils = require("utils")
+    utils.check_module()
+    utils.dump(cel.incoming_message)
+    """
   end
 end

@@ -28,6 +28,10 @@ defmodule Dispatcher.Process do
     }
   end
 
+  def hello_world() do
+    Logging.debug("hello world.")
+  end
+
   @spec start_local_gen_server(atom(), any(), [
           {:debug, [any()]}
           | {:hibernate_after, :infinity | non_neg_integer()}
@@ -54,11 +58,13 @@ defmodule Dispatcher.Process do
   end
 
   def get_module_by_message(message) do
-    Dispatcher.Protocols.DispatcherInfo.get_unit_process_module_for_message(message)
+    ProcessManager.UnitProcess.Identifier.get_process_module(message)
+    # Dispatcher.Protocols.DispatcherInfo.get_unit_process_module_for_message(message)
   end
 
   def get_process_name_by_message(message) do
-    Dispatcher.Protocols.DispatcherInfo.get_process_name(message)
+    ProcessManager.UnitProcess.Identifier.get_process_name(message)
+    # Dispatcher.Protocols.DispatcherInfo.get_process_name(message)
 
     # case message do
     #   %DatabaseEngine.Models.SMS{
@@ -82,11 +88,34 @@ defmodule Dispatcher.Process do
   end
 
   def send_messages(messages) do
+    Logging.debug("called.")
+    Logging.debug("called with messages length:~p", [messages |> length])
+
     process_names =
       messages
       |> Enum.map(&get_process_name_by_message/1)
 
-    process_message_tuples = Enum.zip(process_names, messages)
+    # remove process_names which are nil
+    ignored_message_count =
+      process_names
+      |> Enum.filter(fn x ->
+        case x do
+          nil -> true
+          _ -> false
+        end
+      end)
+      |> length()
+
+    Logging.debug("ignored message (nil process_name) count:~p", [ignored_message_count])
+
+    process_message_tuples =
+      Enum.zip(process_names, messages)
+      |> Enum.filter(fn {pn, _} ->
+        case pn do
+          nil -> false
+          _ -> true
+        end
+      end)
 
     results =
       process_message_tuples
