@@ -111,16 +111,21 @@ defmodule Utilities do
   def to_struct(kind, attrs) do
     struct = struct(kind)
 
-    Enum.reduce(
+    r= Enum.reduce(
       Map.to_list(struct),
       struct,
       fn {k, _}, acc ->
-        case Map.fetch(attrs, Atom.to_string(k)) do
-          {:ok, v} -> %{acc | k => v}
-          :error -> acc
+        if k == :__struct__ do
+          acc
+        else
+          case Map.fetch(attrs, Atom.to_string(k)) do
+            {:ok, v} -> %{acc | k => v}
+            :error -> acc
+          end
         end
       end
     )
+    r
   end
 
   def update_struct(struct, attrs) do
