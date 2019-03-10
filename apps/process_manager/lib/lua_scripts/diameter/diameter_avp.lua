@@ -36,12 +36,16 @@ function DiameterAVP:create(t)
     new_inst.protected = t.protected or 0
     new_inst.avp_value = t.avp_value or nil
 
+
+    --useful when elixir process tries to deserialze maps
+    new_inst.__struct__ = "Elixir.Utilities.Parsers.Diameter.AVP" 
+
     return new_inst
 end
 
 function DiameterAVP:set_value(value)
 
-    if DIMAMETER_AVP_TYPE.check_type(self.avp_type, value) == false then
+    if DIAMETER_AVP_TYPE.check_type(self.avp_type, value) == false then
         error("value is invalid to store in this avp. cause of its value is incompatible with avp type")
     end
     

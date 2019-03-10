@@ -1,5 +1,6 @@
 require("utils/reflection")
 require("diameter/diameter_avp")
+require("diameter/diameter_avp_commands")
 
 -- DiameterModelFromRC9 = {
 --     id = nil,
@@ -28,6 +29,20 @@ require("diameter/diameter_avp")
 DiameterPacket = {}
 DiameterPacket_mt = {__index = DiameterPacket}
 
+function DiameterPacket.response_from_resquest(request)
+    return DiameterPacket:create {
+        version = request.version,
+        request_bit = 0,
+        proxiable_bit = request.proxiable_bit,
+        error_bit = 0,
+        potentially_retransmit = 0,
+        command_code = DIAMETER_COMMANDS.get_response_for_request(request.command_code),
+        application_id = request.application_id,
+        hop_by_hop_id = request.hop_by_hop_id,
+        end_to_end_id = request.end_to_end_id
+    }
+end
+
 function DiameterPacket:create(t)
     local new_inst = {}
     setmetatable(new_inst, DiameterPacket_mt)
@@ -47,12 +62,14 @@ function DiameterPacket:create(t)
     new_inst.hop_by_hop_id = t.hop_by_hop_id or 0
     new_inst.end_to_end_id = t.end_to_end_id or 0
     new_inst.avps = t.avps or {} -- list of diameter AVP
+    
+    --useful when elixir process tries to deserialze maps
+    new_inst.__struct__ = "Elixir.Utilities.Parsers.Diameter.DiameterPacket" 
 
     return new_inst
 end
 
 function DiameterPacket:add_avp(avp)
-    -- body
     if is_instanceof(avp, DiameterAVP) == false then
         error("passed argument is not avp")
     end
@@ -62,7 +79,7 @@ end
 
 --returns a pair as index, avp value
 function DiameterPacket:get_avp_index(avp_code)
-    for i, avp in ipairs(self.avps) do 
+    for i, avp in ipairs(self.avps) do
         if avp.avp_code == avp_code then
             return i
         end
@@ -71,7 +88,7 @@ function DiameterPacket:get_avp_index(avp_code)
 end
 
 function DiameterPacket:get_avp(avp_code)
-    local avp_index= self:get_avp_index(avp_code)
+    local avp_index = self:get_avp_index(avp_code)
     if avp_index == nil then
         return nil
     end
@@ -83,6 +100,6 @@ function DiameterPacket:del_avp(avp_code)
     if avp_index == nil then
         return nil
     end
-    table.remove( self.avps, avp_index )
+    table.remove(self.avps, avp_index)
     return avp_index
 end

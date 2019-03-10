@@ -84,3 +84,9 @@ DIAMETER_COMMANDS = {
     NIR = 8388726, --S6t per 3GPP TS 29.336
     NIA = 8388726 --S6t per 3GPP TS 29.336
 }
+function DIAMETER_COMMANDS.get_response_for_request(request_code)
+    if DIAMETER_COMMANDS[request_code] == nil then
+        return nil
+    end
+    return request_code
+end
