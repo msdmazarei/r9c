@@ -106,12 +106,15 @@ defimpl ProcessManager.UnitProcess.Identifier,
 
   def get_script(_data, _state) do
     """
-    print("diameter script called.")
-    local utils = require("utils")
-    utils.check_module()
-    -- print(utils.dump(cel.incoming_message))
-    print("application id: ",cel.incoming_message.parsed_packet.application_id)
-    return true
+
+require "diameter/diameter_packet"
+require "diameter/diameter_general_avp"
+
+local response = DiameterPacket.response_from_resquest(cel.incoming_message.parsed_packet)
+response:add_avp(diameter_result_code(2000))
+return response
+
+
     """
   end
 end

@@ -8,8 +8,8 @@ defmodule OnlineChargingSystem.Servers.Diameter.TcpSocket do
   require DatabaseEngine.Models.DiameterPacket
   require DatabaseEngine.Models.InternalCallback
 
-  @tcp_recv_timeout 30_000
-
+  @tcp_recv_timeout 60_000
+  @last_packet_arrived_time "last_packet_arrived_time"
   @compile {:inline, get_peer_ip_address_as_string: 1}
 
   def start_listen(port_no \\ 3868, ip \\ {127, 0, 0, 1}) do
@@ -63,24 +63,95 @@ defmodule OnlineChargingSystem.Servers.Diameter.TcpSocket do
     Utilities.Conversion.ip_address_tuple_to_string(client_ip_address_tuple)
   end
 
-  def send_response_back_to_client(pid, packet_bin_to_send) do
-    Logger.debug("Called. with params pid:~p packet_bin_to_send:~p",[
-      pid,packet_bin_to_send
-    ])
+  def send_response_back_to_client(pid, script_state) do
+    Logging.debug("Called. pid:~p scr:~p", [pid, script_state.last_cel_result])
+
+    pid =
+      case pid do
+        v when is_pid(v) ->
+          v
+
+        _ ->
+          :erlang.list_to_pid(Utilities.to_erl_list(pid))
+      end
+
+    Logging.debug("client pid:~p", [pid])
+
+    case script_state.last_cel_result do
+      {:error, _} ->
+        Logging.debug("error in script run")
+
+      {:return, [v = %Utilities.Parsers.Diameter.DiameterPacket{}]} ->
+        Logging.debug("will call pid:~p with send_diameter_packet",[pid])
+        send(
+          pid,
+          {:send_diameter_packet,
+           %{
+             "bin" => Utilities.Parsers.Diameter.serialize_to_bin(v),
+             "packet" => v
+           }}
+        )
+
+      {:return, any} ->
+        Logging.warn("Unexpected result from script:~p", [any])
+    end
+
     # send pid, packet_bin_to_send
+  end
+
+  def check_any_packet_to_send_to_client(client, client_config) do
+    receive do
+      {:send_diameter_packet, value} ->
+        if value["bin"] do
+          Logging.debug("Send A Diameter Packet :~p to cliient: ~p", [
+            value["bin"],
+            :inet.peername(client)
+          ])
+
+          :ok = :gen_tcp.send(client, value["bin"])
+          Logging.debug("packet sent")
+        end
+
+        # code
+    after
+      1 ->
+        :ok
+    end
   end
 
   def server_diameter_client(client, client_config, buf \\ <<>>) do
     {:ok, {client_ip_tuple, client_port}} = :inet.peername(client)
     client_ip_address_string = Utilities.Conversion.ip_address_tuple_to_string(client_ip_tuple)
 
-    Logging.debug("waiting to  new data from client. old-buf-len:~p", [byte_size(buf)])
+    # Logging.debug("waiting to  new data from client. old-buf-len:~p", [byte_size(buf)])
 
-    case :gen_tcp.recv(client, 0, @tcp_recv_timeout) do
+    if Process.get(@last_packet_arrived_time) == nil do
+      Process.put(@last_packet_arrived_time, Utilities.now())
+
+      Logging.debug("socket process_id: ~p for ~p", [
+        self(),
+        :inet.peername(client)
+      ])
+    end
+
+    if Utilities.now() - Process.get(@last_packet_arrived_time) > @tcp_recv_timeout do
+      Logging.debug("exit process ~p communicate with ip:~p no packet arrived", [
+        self(),
+        get_peer_ip_address_as_string(client)
+      ])
+
+      Process.exit(self, :kill)
+    end
+
+    case :gen_tcp.recv(client, 0, 10) do
       {:error, reason} ->
-        Logging.error("problem happen to socket read. error:~p", [reason])
+        # Logging.error("problem happen to socket read. error:~p", [reason])
+        check_any_packet_to_send_to_client(client, client_config)
+        server_diameter_client(client, client_config, buf)
 
       {:ok, packet} ->
+        Process.put(@last_packet_arrived_time, Utilities.now())
+        check_any_packet_to_send_to_client(client, client_config)
         Logging.debug("new packet arrived. it is packet-length:~p", [byte_size(packet)])
         new_buf = buf <> packet
         {dia_packets, rest_buf} = detect_diameter_packet(new_buf)
@@ -94,7 +165,6 @@ defmodule OnlineChargingSystem.Servers.Diameter.TcpSocket do
             Logging.debug("enqueue packet to q:~p", [qn])
 
             diameter_struct = %DatabaseEngine.Models.DiameterPacket{
-
               id: UUID.uuid1(),
               client_address: client_ip_address_string,
               client_port: client_port,
@@ -102,13 +172,11 @@ defmodule OnlineChargingSystem.Servers.Diameter.TcpSocket do
               packet_bin: x,
               parsed_packet: Utilities.Parsers.Diameter.parse_from_bin(x),
               options: %{},
-              internal_callback: nil
-
-              # %DatabaseEngine.Models.InternalCallback {
-              #   module_name: __MODULE__,
-              #   function_name: "send_response_back_to_client",
-              #   arguments: [self()]
-              # }
+              internal_callback: %DatabaseEngine.Models.InternalCallback{
+                module_name: __MODULE__,
+                function_name: :send_response_back_to_client,
+                arguments: [:erlang.pid_to_list(self())]
+              }
             }
 
             :ok =
@@ -184,5 +252,4 @@ defmodule OnlineChargingSystem.Servers.Diameter.TcpSocket do
       nil
     end
   end
-
 end

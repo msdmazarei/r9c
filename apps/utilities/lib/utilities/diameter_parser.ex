@@ -18,7 +18,10 @@ defmodule Utilities.Parsers.Diameter.AVP do
             mandatory: 0,
             protected: 0,
             avp_length: 0,
-            bin_value: <<>>
+            bin_value: <<>>,
+            # below are logical and generally use to construct binary from value
+            avp_type: nil,
+            avp_value: nil
 end
 
 defmodule Utilities.Parsers.Diameter do
@@ -126,5 +129,105 @@ defmodule Utilities.Parsers.Diameter do
 
   def parse_avps(_, list_of_parsed_avps) do
     list_of_parsed_avps
+  end
+
+  def serialize_to_bin(%Utilities.Parsers.Diameter.DiameterPacket{
+        version: version,
+        request_bit: request_bit,
+        proxiable_bit: proxiable_bit,
+        error_bit: error_bit,
+        potentially_retransmit: potentially_retransmit,
+        command_code: command_code,
+        application_id: application_id,
+        hop_by_hop_id: hop_by_hop_id,
+        end_to_end_id: end_to_end_id,
+        avps: avps
+      }) do
+    avp_bins = avps |> Enum.map(&serialize_to_bin/1)
+
+    message_len =
+      div(
+        8 + 24 + 1 + 1 + 1 + 1 + 4 + 24 + 32 + 32 + 32,
+        8
+      ) +
+        (avp_bins
+         |> Enum.map(&byte_size/1)
+         |> Enum.sum())
+
+    avps_bin =
+      avp_bins
+      |> Enum.reduce(<<>>, fn b, acc ->
+        <<acc::binary, b::binary>>
+      end)
+
+    <<version::size(8), message_len::size(24), request_bit::size(1), proxiable_bit::size(1),
+      error_bit::size(1), potentially_retransmit::size(1), 0::size(4), command_code::size(24),
+      application_id::size(32), hop_by_hop_id::size(32), end_to_end_id::size(32),
+      avps_bin::binary>>
+  end
+
+  def serialize_to_bin(%Utilities.Parsers.Diameter.AVP{
+        avp_code: avp_code,
+        vendor_specific: vendor_specific,
+        mandatory: mandatory,
+        protected: protected,
+        avp_type: avp_type,
+        avp_value: avp_value
+      }) do
+    rtn =
+      <<avp_code::size(32), vendor_specific::size(1), mandatory::size(1), protected::size(1),
+        0::size(5)>>
+
+    rtn =
+      case avp_type do
+        "OctetString" ->
+          rtn
+
+        "Integer32" ->
+          rtn
+
+        "Integer64" ->
+          rtn
+
+        "Unsigned32" ->
+          avp_length = byte_size(rtn) + div(32, 8)
+          <<rtn::binary(), avp_length::size(24), avp_value::size(32)>>
+
+        "Unsigned64" ->
+          avp_length = byte_size(rtn) + div(64, 8)
+          <<rtn::binary(), avp_length::size(24), avp_value::size(32)>>
+
+        "Float32" ->
+          rtn
+
+        "Float64" ->
+          rtn
+
+        "Address" ->
+          rtn
+
+        "Time" ->
+          rtn
+
+        "UTF8String" ->
+          rtn
+
+        "DiameterIdentity" ->
+          rtn
+
+        "DiameterURI" ->
+          rtn
+
+        "Enumerated" ->
+          rtn
+
+        "IPFilterRule" ->
+          rtn
+
+        "QoSFilterRule" ->
+          rtn
+      end
+
+    rtn
   end
 end

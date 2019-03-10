@@ -157,7 +157,7 @@ defmodule Utilities do
           v when is_atom(v) -> v
         end
 
-      # Logging.debug("called.....")
+        # Logging.debug("called.....")
 
       function_tocall =
         case function_name do

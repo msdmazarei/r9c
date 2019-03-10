@@ -85,4 +85,12 @@ defmodule Utilities.Conversion do
   def ip_address_tuple_to_string(ip_address_tuple) when is_tuple(ip_address_tuple) do
     Utilities.erl_list_to_iex_string(:inet_parse.ntoa(ip_address_tuple))
   end
+
+  @spec integer_to_inet_binary(integer(), integer()) :: binary()
+  @compile {:inline, integer_to_inet_binary: 2}
+  def integer_to_inet_binary(number, bin_length)
+      when is_integer(number) and is_integer(bin_length) do
+    bit_size = 8 * bin_length
+    <<number::size(bit_size)>>
+  end
 end
