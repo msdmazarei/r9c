@@ -10,6 +10,7 @@ DiameterAVP_mt = {__index = DiameterAVP}
 --- protected
 --- avp_type
 --- avp_value
+--- bin_value
 --- avp_type is enforced
 
 function DiameterAVP:create(t)
@@ -54,4 +55,10 @@ end
 
 function DiameterAVP.get_class_metatable()
     return DiameterAVP_mt
+end
+
+function DiameterAVP:get_uint32_value()
+    local val = self.bin_value
+    local rtn = string.byte(val,1)* 0x1000000 + string.byte(val,2)*0x10000+ string.byte(val,3) * 0x100 + string.byte(val,4)
+    return  rtn
 end
