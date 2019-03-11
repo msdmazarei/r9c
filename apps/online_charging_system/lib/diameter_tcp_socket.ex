@@ -54,7 +54,13 @@ defmodule OnlineChargingSystem.Servers.Diameter.TcpSocket do
     {:ok, {client_ip_address_tuple, _client_port}} = :inet.peername(client)
     client_ip_address = Utilities.Conversion.ip_address_tuple_to_string(client_ip_address_tuple)
     client_config = diameter_server_config[client_ip_address] || diameter_server_config["default"]
-    Kernel.spawn(__MODULE__, :server_diameter_client, [client, client_config])
+
+    {:ok, pid } = GenServer.start(OnlineChargingSystem.Servers.Diameter.ConnectedClientProcess, %{
+      "client"=> client,
+      "config" => client_config
+    })
+    Logging.debug("process:~p started to respose to client: ~p",[pid,client_ip_address])
+    # Kernel.spawn(__MODULE__, :server_diameter_client, [client, client_config])
     wait_to_connection(lsocket)
   end
 
@@ -63,6 +69,10 @@ defmodule OnlineChargingSystem.Servers.Diameter.TcpSocket do
     Utilities.Conversion.ip_address_tuple_to_string(client_ip_address_tuple)
   end
 
+  @spec send_response_back_to_client(
+          any(),
+          atom() | %{last_cel_result: {:error, any()} | {:return, any()}}
+        ) :: any()
   def send_response_back_to_client(pid, script_state) do
     Logging.debug("Called. pid:~p scr:~p", [pid, script_state.last_cel_result])
 
