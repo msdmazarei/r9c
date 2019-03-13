@@ -10,11 +10,19 @@ defmodule ProcessManager.Script.Functionalities.KVDB do
       "kvdb" =>
         Map.to_list(%{
           "get" => &kvdb_get/2,
-          "set" => &kvdb_set/2
+          "set" => &kvdb_set/2,
+          "transaction" => &kvdb_transaction/2
         })
     }
   end
 
+  def kvdb_transaction(args,state) do
+    Logging.debug("called. args:~p",[args])
+    f= args[:function]
+    rtn = f.([])
+    #run passed function
+    {rtn,state}
+  end
   def kvdb_get(args, state) do
     Logging.debug("kvdb_get called args:~p~n", [args])
 
