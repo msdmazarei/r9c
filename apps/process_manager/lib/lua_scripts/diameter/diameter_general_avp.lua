@@ -21,3 +21,12 @@ function general_uint32_avp(code,value)
     rtn:set_value(value)
     return rtn
 end
+
+function general_octet_string_avp(code,value)
+    local rtn = DiameterAVP:create{
+        avp_code = code,
+        avp_type = DIAMETER_AVP_TYPE.OctetString
+    }
+    rtn:set_value(value)
+    return rtn
+end

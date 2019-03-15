@@ -68,7 +68,10 @@ function DiameterPacket:create(t)
 
     return new_inst
 end
-
+function DiameterPacket:check_meta()
+    print("this is DiameterPacket")
+    return "hello"
+end
 function DiameterPacket:add_avp(avp)
     if is_instanceof(avp, DiameterAVP) == false then
         error("passed argument is not avp")
@@ -79,8 +82,11 @@ end
 
 --returns a pair as index, avp value
 function DiameterPacket:get_avp_index(avp_code)
+    print("get_avp_index called for avp_code:",avp_code)
     for i, avp in ipairs(self.avps) do
+        print("checking avp code:",avp.avp_code)
         if avp.avp_code == avp_code then
+            print("reurn index:",i)
             return i
         end
     end
@@ -90,9 +96,14 @@ end
 function DiameterPacket:get_avp(avp_code)
     local avp_index = self:get_avp_index(avp_code)
     if avp_index == nil then
+        print("reurn nil")
         return nil
     end
-    return self.avps[avp_index]
+    print("return found avp")
+    local rtn =  self.avps[avp_index]
+    setmetatable(rtn,DiameterAVP_mt)
+
+    return rtn
 end
 
 function DiameterPacket:del_avp(avp_code)

@@ -24,5 +24,8 @@ function DIAMETER_AVP_TYPE.check_type(type_to_check, value)
     if (type_to_check == DIAMETER_AVP_TYPE.Unsigned32) or (type_to_check == DIAMETER_AVP_TYPE.Unsigned64) then
         return is_number(value) and (is_positive(value) or value == 0) and is_integer(value)
     end
+    if(type_to_check==DIAMETER_AVP_TYPE.OctetString) then
+        return type(value) == "string"
+    end
     return false
 end

@@ -190,7 +190,9 @@ defmodule ProcessManager.Script do
     fns = [
       ProcessManager.Script.Functionalities.HTTP.lua_functionalities(),
       ProcessManager.Script.Functionalities.KVDB.lua_functionalities(),
-      ProcessManager.Script.Functionalities.Radius.lua_functionalities()
+      ProcessManager.Script.Functionalities.Radius.lua_functionalities(),
+      ProcessManager.Script.Functionalities.Diameter.lua_functionalities()
+
     ]
 
     fns_map =

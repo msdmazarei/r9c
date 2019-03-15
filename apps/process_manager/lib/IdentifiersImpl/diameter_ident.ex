@@ -21,19 +21,23 @@ defimpl ProcessManager.UnitProcess.Identifier,
         }
       },
       "default" => %{
-        1 => %{ #for NASREQ application
+        # for NASREQ application
+        1 => %{
           "process_name" => %{
             "type" => "avp",
-            "avp_code" => 1 #specifies UserName AVP
+            # specifies UserName AVP
+            "avp_code" => 1
           }
         },
-        "default" => %{ #for any app which not specified here
-          "process_name" => %{ #process name calculation
-              "type"=> "avp", # says calculate process name by avp is contaid in packet
-              "avp_code" => 1 # avp code which specifies process name here for NASREQ packet means USERNAME
-
+        # for any app which not specified here
+        "default" => %{
+          # process name calculation
+          "process_name" => %{
+            # says calculate process name by avp is contaid in packet
+            "type" => "avp",
+            # avp code which specifies process name here for NASREQ packet means USERNAME
+            "avp_code" => 1
           }
-
         }
       }
     }
@@ -44,7 +48,6 @@ defimpl ProcessManager.UnitProcess.Identifier,
 
   def get_config_for_app(app, client_conf) do
     client_conf[app] || client_conf["default"] || %{}
-
   end
 
   def get_process_name(
@@ -107,12 +110,49 @@ defimpl ProcessManager.UnitProcess.Identifier,
   def get_script(_data, _state) do
     """
 
-require "diameter/diameter_packet"
-require "diameter/diameter_general_avp"
+    require "diameter/diameter_packet"
+    require "diameter/diameter_general_avp"
+    require "diameter/diameter_avp"
+    require "utils"
 
-local response = DiameterPacket.response_from_resquest(cel.incoming_message.parsed_packet)
-response:add_avp(diameter_result_code(2000))
-return response
+    local response = DiameterPacket.response_from_resquest(cel.incoming_message.parsed_packet)
+
+    local dia_in = cel.incoming_message.parsed_packet
+
+    setmetatable(dia_in, DiameterPacket_mt)
+
+    print("called..........")
+    local sip_msg_avp  = dia_in:get_avp(406)
+    local sip_service_type = dia_in:get_avp(404)
+    local avp_realm = dia_in:get_avp(283)
+    local avp_nas_filter = dia_in:get_avp(400)
+    local avp_user_name = dia_in:get_avp(1)
+
+
+
+    print("==========================")
+    print(avp_realm:get_string_value())
+
+
+    local avp_value = sip_msg_avp:get_uint32_value()
+    local sip_service_type_value = sip_service_type:get_uint32_value()
+
+    print("sip msgid value:",avp_value)
+    print("service type value: ", sip_service_type_value)
+
+
+    local AVP_Service_Type = 404
+
+    response:add_avp(diameter_result_code(2001))
+    response:add_avp(general_uint32_avp(406,avp_value))
+    response:add_avp(general_uint32_avp(AVP_Service_Type,sip_service_type_value))
+    response:add_avp(general_octet_string_avp(283,"127.0.0.1"))
+    response:add_avp(avp_nas_filter)
+
+    if avp_user_name ~= nil then
+      response:add_avp(avp_user_name)
+    end
+    return response
 
 
     """

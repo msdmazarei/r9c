@@ -172,60 +172,93 @@ defmodule Utilities.Parsers.Diameter do
         mandatory: mandatory,
         protected: protected,
         avp_type: avp_type,
-        avp_value: avp_value
+        avp_value: avp_value,
+        bin_value: bin_value,
+        avp_length: avp_l
       }) do
     rtn =
       <<avp_code::size(32), vendor_specific::size(1), mandatory::size(1), protected::size(1),
         0::size(5)>>
 
     rtn =
-      case avp_type do
-        "OctetString" ->
-          rtn
+      case bin_value do
+        v when is_binary(v) and byte_size(v) > 0 ->
+          <<rtn::binary, avp_l::size(24), bin_value::binary>>
 
-        "Integer32" ->
-          rtn
+        _ ->
+          case avp_type do
+            "OctetString" ->
+              required_bytes = byte_size(avp_value)
+              #  3 is for avp_len field
+              total_packet_size_without_padding = byte_size(rtn) + required_bytes + 3
 
-        "Integer64" ->
-          rtn
+              with_padding_size = Kernel.ceil(total_packet_size_without_padding / 4) * 4
+              avp_length = total_packet_size_without_padding
+              padding_bits = (with_padding_size - total_packet_size_without_padding) * 8
 
-        "Unsigned32" ->
-          avp_length = byte_size(rtn) + div(32, 8)
-          <<rtn::binary(), avp_length::size(24), avp_value::size(32)>>
+              rtn =
+                <<rtn::binary(), avp_length::size(24), avp_value::binary, 0::size(padding_bits)>>
 
-        "Unsigned64" ->
-          avp_length = byte_size(rtn) + div(64, 8)
-          <<rtn::binary(), avp_length::size(24), avp_value::size(32)>>
+              Logging.debug("octet string avp result:~p", [rtn])
+              rtn
 
-        "Float32" ->
-          rtn
+            "Integer32" ->
+              rtn
 
-        "Float64" ->
-          rtn
+            "Integer64" ->
+              rtn
 
-        "Address" ->
-          rtn
+            "Unsigned32" ->
+              byte_needs =
+                case avp_value do
+                  n when n < 0x100 -> 1
+                  n when n < 0x10000 -> 4
+                  n when n < 0x1000000 -> 4
+                  n when n < 0x100000000 -> 4
+                end
 
-        "Time" ->
-          rtn
+              avp_length = byte_size(rtn) + byte_needs + 3
+              # avp_length=12
+              bit_needs = 8 * byte_needs
+              bit_notneed = 32 - bit_needs
 
-        "UTF8String" ->
-          rtn
+              <<rtn::binary(), avp_length::size(24), avp_value::size(bit_needs),
+                0::size(bit_notneed)>>
 
-        "DiameterIdentity" ->
-          rtn
+            "Unsigned64" ->
+              avp_length = byte_size(rtn) + div(64, 8)
+              <<rtn::binary(), avp_length::size(24), avp_value::size(32)>>
 
-        "DiameterURI" ->
-          rtn
+            "Float32" ->
+              rtn
 
-        "Enumerated" ->
-          rtn
+            "Float64" ->
+              rtn
 
-        "IPFilterRule" ->
-          rtn
+            "Address" ->
+              rtn
 
-        "QoSFilterRule" ->
-          rtn
+            "Time" ->
+              rtn
+
+            "UTF8String" ->
+              rtn
+
+            "DiameterIdentity" ->
+              rtn
+
+            "DiameterURI" ->
+              rtn
+
+            "Enumerated" ->
+              rtn
+
+            "IPFilterRule" ->
+              rtn
+
+            "QoSFilterRule" ->
+              rtn
+          end
       end
 
     rtn

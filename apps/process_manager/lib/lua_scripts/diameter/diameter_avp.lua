@@ -37,19 +37,17 @@ function DiameterAVP:create(t)
     new_inst.protected = t.protected or 0
     new_inst.avp_value = t.avp_value or nil
 
-
     --useful when elixir process tries to deserialze maps
-    new_inst.__struct__ = "Elixir.Utilities.Parsers.Diameter.AVP" 
+    new_inst.__struct__ = "Elixir.Utilities.Parsers.Diameter.AVP"
 
     return new_inst
 end
 
 function DiameterAVP:set_value(value)
-
     if DIAMETER_AVP_TYPE.check_type(self.avp_type, value) == false then
         error("value is invalid to store in this avp. cause of its value is incompatible with avp type")
     end
-    
+
     self.avp_value = value
 end
 
@@ -58,7 +56,16 @@ function DiameterAVP.get_class_metatable()
 end
 
 function DiameterAVP:get_uint32_value()
-    local val = self.bin_value
-    local rtn = string.byte(val,1)* 0x1000000 + string.byte(val,2)*0x10000+ string.byte(val,3) * 0x100 + string.byte(val,4)
-    return  rtn
+    print("get_unit_32_called")
+    self:test_cel_function()
+    return cel.diameter.avp_value(self.bin_value, DIAMETER_AVP_TYPE.Unsigned32)
+end
+function DiameterAVP:get_string_value()
+    print("get_string_value called.")
+    return cel.diameter.avp_octet_string(self)
+end
+function DiameterAVP:test_cel_function()
+    print(cel.diameter.test_function())
+
+    return 0
 end
