@@ -11,13 +11,17 @@ defmodule ProcessManager.Script do
           {:return, any()} | {:error, any()}
   @spec run_script(any(), any(), any(), any(), :infinity | non_neg_integer()) :: {any(), any()}
   def parse_rtn_value(r, lstate) do
-    r
+    Logging.debug("trying to parse returned value:~p",[r])
+    parsed_tables = r
     |> Enum.map(fn x ->
       case x do
         {:tref, _} -> LUA.decode(x, lstate)
         _ -> x
       end
     end)
+    Logging.debug("to_elixir will call by value:~p",[parsed_tables])
+
+    parsed_tables
     |> ProcessManager.Script.Utilities.to_elixir()
   end
 
@@ -191,7 +195,8 @@ defmodule ProcessManager.Script do
       ProcessManager.Script.Functionalities.HTTP.lua_functionalities(),
       ProcessManager.Script.Functionalities.KVDB.lua_functionalities(),
       ProcessManager.Script.Functionalities.Radius.lua_functionalities(),
-      ProcessManager.Script.Functionalities.Diameter.lua_functionalities()
+      ProcessManager.Script.Functionalities.Diameter.lua_functionalities(),
+      ProcessManager.Script.Functionalities.Utils.lua_functionalities()
 
     ]
 

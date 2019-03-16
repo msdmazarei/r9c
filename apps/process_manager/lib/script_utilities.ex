@@ -14,21 +14,21 @@ defmodule ProcessManager.Script.Utilities do
     v2
   end
 
-  def to_elixir(nil) do
-    nil
-  end
-
   def is_map_lua_list(m) when is_map(m) do
     keys = m |> Map.keys()
-    min = keys |> Enum.min()
-    max = keys |> Enum.max()
-    ukeys = keys |> Enum.uniq()
 
-    if min == 1 and is_number(max) do
-      length(ukeys) == max - min + 1
-      true
+    if length(keys) > 0 do
+      min = keys |> Enum.min()
+      max = keys |> Enum.max()
+      ukeys = keys |> Enum.uniq()
+
+      if min == 1 and is_number(max) do
+        length(ukeys) == max - min + 1
+      else
+        false
+      end
     else
-      false
+      true
     end
   end
 
@@ -36,7 +36,13 @@ defmodule ProcessManager.Script.Utilities do
     false
   end
 
+  def to_elixir(nil) do
+    # Logging.debug("[nil] Called.")
+    nil
+  end
+
   def to_elixir(var) when is_list(var) do
+    # Logging.debug("[list] Called with: ~p", [var])
 
     r =
       if Utilities.is_list_of_tuples(var) do
@@ -69,20 +75,24 @@ defmodule ProcessManager.Script.Utilities do
         end)
       end
 
-    r
-    |> Utilities.for_each_non_iterable_item(fn x ->
-      case x do
-        v when is_float(v) ->
-          if Kernel.trunc(v) == v do
-            Kernel.trunc(v)
-          else
-            v
-          end
+    rtn =
+      r
+      |> Utilities.for_each_non_iterable_item(fn x ->
+        case x do
+          v when is_float(v) ->
+            if Kernel.trunc(v) == v do
+              Kernel.trunc(v)
+            else
+              v
+            end
 
-        v ->
-          v
-      end
-    end)
+          v ->
+            v
+        end
+      end)
+
+    # Logging.debug("returns:~p", [rtn])
+    rtn
   end
 
   def to_elixir(var) when is_number(var) or is_bitstring(var) do
@@ -90,7 +100,7 @@ defmodule ProcessManager.Script.Utilities do
   end
 
   def to_elixir(any) do
-    Logging.debug("called with arg:~p", [any])
+    # Logging.debug("[any] called with arg:~p", [any])
     any
   end
 end

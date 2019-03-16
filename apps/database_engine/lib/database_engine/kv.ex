@@ -1,5 +1,8 @@
 defmodule DatabaseEngine.Interface.KV do
   @moduledoc false
+  require Logger
+  require Utilities.Logging
+  alias Utilities.Logging
 
   @spec set(String.t(), any(), Integer.t()) :: :ok | {:error, Atom.t()}
   @doc """
@@ -48,6 +51,23 @@ defmodule DatabaseEngine.Interface.KV do
 
       [] ->
         nil
+    end
+  end
+
+  def get_for_update(key) do
+    case :mnesia.is_transaction() do
+      true ->
+        case :mnesia.read(KVTb, key, :write) do
+          [{KVTb, _, value}] ->
+            value
+
+          _ ->
+            nil
+        end
+
+      false ->
+        Logging.error("try to read lock when we have no transaction context, key:~p", [key])
+        throw("no transaction context to read_and_write_lock functionan")
     end
   end
 
