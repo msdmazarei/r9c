@@ -108,6 +108,7 @@ defmodule DatabaseEngine.Mnesia.DbSetup do
     {AppTb, [:idx, :service_idx, :apikeys, :options, :_internal]},
     {ApikeyTb, [:idx, :key_idx, :net_acl_idx, :options, :_internal]},
     {ProcessTb, [:idx, :model]},
+    {OCSAccount,[ :idx, :lua_ocs_account]},
     {SubscriptionTb,
      [
        :idx,

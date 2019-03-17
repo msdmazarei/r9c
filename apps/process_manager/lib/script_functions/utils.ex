@@ -11,9 +11,16 @@ defmodule ProcessManager.Script.Functionalities.Utils do
     %{
       "utils" =>
         Map.to_list(%{
-          "sleep" => &sleep/2
+          "sleep" => &sleep/2,
+          "unixepoch_now" => &now/2,
+          "debug_print" => &debug_print/2
         })
     }
+  end
+
+  def debug_print(args, state) do
+    Logging.debug("args:~p", [args])
+    {[true], state}
   end
 
   def sleep(args, state) do
@@ -32,5 +39,11 @@ defmodule ProcessManager.Script.Functionalities.Utils do
     :timer.sleep(Kernel.trunc(wait_time))
 
     {[true], state}
+  end
+
+  def now(args, state) do
+    #to make it will be float
+
+    {[Utilities.now() + 0.1], state}
   end
 end

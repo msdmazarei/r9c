@@ -196,7 +196,8 @@ defmodule ProcessManager.Script do
       ProcessManager.Script.Functionalities.KVDB.lua_functionalities(),
       ProcessManager.Script.Functionalities.Radius.lua_functionalities(),
       ProcessManager.Script.Functionalities.Diameter.lua_functionalities(),
-      ProcessManager.Script.Functionalities.Utils.lua_functionalities()
+      ProcessManager.Script.Functionalities.Utils.lua_functionalities(),
+      ProcessManager.Script.Functionalities.OCSAccount.lua_functionalities()
 
     ]
 
