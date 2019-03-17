@@ -123,3 +123,8 @@ function OCSAccount:remove_before_when(when)
     end
     self.values = rtn
 end
+
+
+function OCSAccount.get_class_metatable( )
+    return OCSAccount_mt
+end

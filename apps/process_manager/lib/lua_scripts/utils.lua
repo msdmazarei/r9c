@@ -1,11 +1,8 @@
 
 function dump(o)
-    print("dump function called for ",o)
-        cel.utils.debug_print({dump  = o} )
     if type(o) == "table" then
         local s = "{ "
         for k, v in pairs(o) do
-            print("key in function",k)
             if type(k) ~= "number" then
                 k = '"' .. k .. '"'
             end
