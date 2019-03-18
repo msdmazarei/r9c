@@ -1,5 +1,5 @@
 AccountingResponse = {}
-AccountingResponse_mt = {__index = AccountingResponse}
+AccountingResponse_mt = {__index = AccountingResponse, __msd_class_name="AccountingResponse"}
 
 function AccountingResponse:create(result_code, username, prop_list)
     local rtn = {

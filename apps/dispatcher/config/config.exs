@@ -33,7 +33,8 @@ import_config "user_process.exs"
 config :dispatcher,
   input_queues: [
     "n2@s1.kafka.local": ["in_dummy", "gsm_ingress"],
-    "n1@s1.kafka.local": ["in_imi", "in_irmtn", "radius_input_q", "diameter_queue"]
+    "n1@s1.kafka.local": ["diameter_queue"],
+    "n3@s1.kafka.local": ["in_imi", "in_irmtn", "radius_input_q", ]
   ]
 
 config :dispatcher, Dispatcher.Process,

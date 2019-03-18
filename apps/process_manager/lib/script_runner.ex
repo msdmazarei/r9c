@@ -16,6 +16,7 @@ defmodule ProcessManager.Script do
     |> Enum.map(fn x ->
       case x do
         {:tref, _} -> LUA.decode(x, lstate)
+        {:function, _, _, _, _, _} -> LUA.decode(x,lstate)
         _ -> x
       end
     end)

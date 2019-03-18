@@ -74,9 +74,15 @@ defmodule ProcessManager.Script.Functionalities.Utils do
   def call_function_in_state(args, state) do
     try do
       [funcname, funcargs, st] = args
+      Logging.debug("funcargs is:~p",[funcargs])
       st = Utilities.Serializers.BinSerializer.deserialize(st)
-      funcargs = Script.to_elixir(funcargs)
-      {rtn, _} = :luerl.call_function([funcname], funcargs, st)
+      funcargs = Script.to_elixir(funcargs) |> Enum.map(
+        fn x ->
+          Script.to_lua(x)
+        end
+      )
+      Logging.debug("call function with args:~p",[funcargs])
+      {[rtn|_], _} = :luerl.call_function([funcname], funcargs, st)
       Logging.debug("it returned ~p",[rtn])
       {[true, rtn], state}
     rescue
