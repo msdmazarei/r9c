@@ -22,7 +22,7 @@ function PackageInstance:create(
         gateway_tags = gateway_tags,
         accounting_request_processing_data = accounting_request_processing_data
     }
-    setmetatable(rtn, PackageInstance)
+    setmetatable(rtn, PackageInstance_mt)
     return rtn
 end
 
@@ -32,6 +32,16 @@ end
 
 function PackageInstance:is_expired()
     -- TODO: better check will contains user account remains
-    return cel.utils.unixepoch_now() > self.expire_epoch 
-    
+    return cel.utils.unixepoch_now() > self.expire_epoch
 end
+
+-- function PackageInstance:save()
+--     print("PackageInstance:save called.")
+--     local key = PackageInstance.get_db_key(self.username)
+--     res = cel.kvdb.set(key, self)
+--     if res == "ok" then
+--         return true, self
+--     else
+--         return false, res
+--     end
+-- end

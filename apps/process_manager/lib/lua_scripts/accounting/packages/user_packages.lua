@@ -1,6 +1,7 @@
 require "utils/list"
 require "utils/reflection"
 require "accounting/packages/package_instance"
+require "utils"
 
 UserPackages = {}
 UserPackages_mt = {__index = UserPackages, __msd_class_name = "UserPackages"}
@@ -43,8 +44,8 @@ function UserPackages:remove_expired_ones()
         self.active_packages
     )
 end
-function UserPackages:get_for_update()
-    local key = UserPackages.get_db_key(self.username)
+function UserPackages.get_for_update(username)
+    local key = UserPackages.get_db_key(username)
     local rtn = cel.kvdb.get_for_update(key)
     if rtn == nil then
         return rtn
@@ -54,29 +55,44 @@ function UserPackages:get_for_update()
     end
 end
 function UserPackages:save()
- 
-            local key = UserPackages.get_db_key(self.username)
-            local old_db_record = self:get_for_update()
-            return cel.kvdb.set(key, self)
-      
+    print("UserPackages:save called.")
+    print(dump(self.username))
+    local key = UserPackages.get_db_key(self.username)
+    return cel.kvdb.set(key, self)
 end
 function UserPackages:remove_package(pkg_identifier)
+    print("UserPackages:remove_package called.")
     self.active_packages =
         list_filter(
         function(item)
-            return item.identifier ~= package_instance.identifier
+            return item.identifier ~= pkg_identifier.identifier
         end,
         self.active_packages
     )
 end
 
 function UserPackages:add_package(package_instance)
+    print("UserPackages:add_package called.")
     self:remove_package(package_instance.identifier)
+    print("package removed")
+
     self.active_packages = list_append(self.active_packages, package_instance)
 end
-
-function UserPackages:activate_package( package_def,identifier, priority, activation_data )
-
-end
-    -- body
+function UserPackages:get_package_by_name_and_identifier(packagedef_name, identifier)
+    local rtn =
+        list_filter(
+        function(item)
+            if item.packagedef_name == packagedef_name and item.identifier == identifier then
+                return true
+            else
+                return false
+            end
+        end,
+        self.active_packages
+    )
+    if list_length(rtn) > 0 then
+        return rtn[1]
+    else
+        return nil
+    end
 end

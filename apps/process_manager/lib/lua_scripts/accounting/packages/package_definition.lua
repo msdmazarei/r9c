@@ -31,17 +31,28 @@ function PackageDefinition.get_db_key(name)
 end
 function PackageDefinition:save()
     local key = PackageDefinition.get_db_key(self.name)
-    cel.kvdb.set(key, self)
+    result = cel.kvdb.set(key, self)
+    if result=="ok" then
+        return true, self
+    else
+        return false, result
+    end
 end
 function PackageDefinition.get_from_db(name)
+
     local key = PackageDefinition.get_db_key(name)
+    print("calling kvdb.get")
     local rtn =  cel.kvdb.get(key)
-    if rtn~= nil then
+    print("retuen value")
+
+    if rtn ~= nil then
         setmetatable(rtn, PackageDefinition_mt)
     end
     return rtn
 end
 
 function PackageDefinition:assign_to_user( username, identifier, priority, activation_props )
-    return self:activation_func(username, identifier, priority, activation_props)
+    print("assign to user called. for user:",username)
+    print("type of activation_func:",type(self.activation_func))
+    return self.activation_func(username, identifier, priority, activation_props)
 end

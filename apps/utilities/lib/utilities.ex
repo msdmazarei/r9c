@@ -78,9 +78,38 @@ defmodule Utilities do
     end
   end
 
-  def nested_tuple_to_list(list) when is_list(list) do
+  def is_valid_lua_table(list) when is_list(list) do
     list
-    |> Enum.map(&nested_tuple_to_list/1)
+    |> Enum.reduce(true, fn i, result ->
+      if result == true do
+        case i do
+          {n, _} when is_number(n) -> result
+          {s, _} when is_binary(s) -> result
+          {l, _} when is_list(l) -> result
+          {a, _} when is_atom(a) -> result
+          {f, _} when is_function(f) -> result
+          _ -> false
+        end
+      else
+        false
+      end
+    end)
+  end
+
+  def is_valid_lua_table(_) do
+    false
+  end
+
+  def nested_tuple_to_list(list) when is_list(list) do
+    if is_valid_lua_table(list) do
+      list
+      |> Enum.map(fn {k, v} ->
+        {nested_tuple_to_list(k), nested_tuple_to_list(v)}
+      end)
+    else
+      list
+      |> Enum.map(&nested_tuple_to_list/1)
+    end
   end
 
   def nested_tuple_to_list(tuple) when is_tuple(tuple) do
@@ -111,20 +140,22 @@ defmodule Utilities do
   def to_struct(kind, attrs) do
     struct = struct(kind)
 
-    r= Enum.reduce(
-      Map.to_list(struct),
-      struct,
-      fn {k, _}, acc ->
-        if k == :__struct__ do
-          acc
-        else
-          case Map.fetch(attrs, Atom.to_string(k)) do
-            {:ok, v} -> %{acc | k => v}
-            :error -> acc
+    r =
+      Enum.reduce(
+        Map.to_list(struct),
+        struct,
+        fn {k, _}, acc ->
+          if k == :__struct__ do
+            acc
+          else
+            case Map.fetch(attrs, Atom.to_string(k)) do
+              {:ok, v} -> %{acc | k => v}
+              :error -> acc
+            end
           end
         end
-      end
-    )
+      )
+
     r
   end
 
@@ -157,7 +188,7 @@ defmodule Utilities do
           v when is_atom(v) -> v
         end
 
-        # Logging.debug("called.....")
+      # Logging.debug("called.....")
 
       function_tocall =
         case function_name do
@@ -241,5 +272,51 @@ defmodule Utilities do
     else
       false
     end
+  end
+
+  def is_iterable(i) when is_map(i) or is_list(i) or is_tuple(i) do
+    true
+  end
+
+  def is_iterable(i) do
+    false
+  end
+
+  def iter_over_all_iterables(iterable, func, first_apply_func) when is_list(iterable) do
+    iter1 =
+      if first_apply_func == true do
+        iterable |> Enum.map(func)
+      else
+        iterable
+        |> Enum.map(fn i ->
+          if is_iterable(i) do
+            i
+          else
+            func.(i)
+          end
+        end)
+      end
+
+    iter1
+    |> Enum.map(fn item ->
+      if is_iterable(item) do
+        i1 = iter_over_all_iterables(item, func, first_apply_func)
+        func.(i1)
+      else
+        item
+      end
+    end)
+  end
+
+  def iter_over_all_iterables(iterable, func, first_apply_func)
+      when is_tuple(iterable) do
+    iterable
+    |> Tuple.to_list()
+    |> iter_over_all_iterables(func, first_apply_func)
+    |> List.to_tuple()
+  end
+
+  def iter_over_all_iterables(iterable, func, first_apply_func) when is_map(iterable) do
+    iterable |> Map.to_list() |> iter_over_all_iterables(func, first_apply_func) |> Map.new()
   end
 end

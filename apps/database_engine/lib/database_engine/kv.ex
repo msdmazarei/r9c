@@ -33,6 +33,7 @@ defmodule DatabaseEngine.Interface.KV do
     gets value of a key from KV
   """
   def get(key) do
+    Logging.debug("called. with key:~p",[key])
     opt = fn -> :mnesia.read(KVTb, key) end
     opd = fn -> :mnesia.dirty_read(KVTb, key) end
 
@@ -45,11 +46,15 @@ defmodule DatabaseEngine.Interface.KV do
           opd
       end
 
-    case op.() do
+      r = op.()
+      Logging.debug("rtn pre value:~p",[r])
+    case r do
       [{KVTb, _, value}] ->
+        Logging.debug("matched. returns: ~p",[value])
         value
 
       [] ->
+
         nil
     end
   end

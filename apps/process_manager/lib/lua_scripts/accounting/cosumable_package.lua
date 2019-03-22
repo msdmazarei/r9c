@@ -1,11 +1,13 @@
 require("accounting/accounting_request")
 require("accounting/accounting_response")
 require("utils/reflection")
-
+require("utils")
 ConsumablePackage = {}
 ConsumablePackage_mt = {__index = ConsumablePackage}
 
-function ConsumablePackage:create(name, tags, script, expiration_epoch_delta)
+function ConsumablePackage:create(name, tags, 
+    activate_for_user_func, 
+    process_incoming_accounting_request_func)
     print("ConsumablePackage:create Called.")
     local rtn = {
         name = name,
@@ -24,7 +26,8 @@ function ConsumablePackage:create(name, tags, script, expiration_epoch_delta)
 end
 
 function ConsumablePackage:compile_script()
-    local compiled_code = cel.utils.compiled_code(self.script)
+    print("compile_script called.")
+    local compiled_code = cel.utils.compile_code(self.script)
     if compiled_code == false then
         return false
     else
@@ -43,6 +46,7 @@ function ConsumablePackage:run_script(accouting_request)
             return false, nil
         end
     end
+    print("calling process_request")
     local status, result = cel.utils.call_function_in_state("process_request", {accouting_request}, self.compiled_state)
     return status, result
 end
@@ -60,12 +64,12 @@ function ConsumablePackage:save()
         return false, "compile error"
     end
     --checking response of object
-    print("is_instanceof function")
-    if is_instanceof(res, AccountingResponse) == false then
-        print("64")
-        return false, "code return value type error"
-    end
-    print("68")
+    -- print("is_instanceof function")
+    -- if is_instanceof(res, AccountingResponse) == false then
+    --     print("64")
+    --     return false, "code return value type error"
+    -- end
+    -- print("68")
     if res.additional_props["test"] ~= "done" then
         print("68")
         return false, "code return value not proper we expected"

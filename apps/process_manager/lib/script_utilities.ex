@@ -8,9 +8,35 @@ defmodule ProcessManager.Script.Utilities do
     var
   end
 
+  def to_lua({:function, f}) do
+    fn ars, st ->
+      {[f.(ars)], st}
+    end
+  end
+
   def to_lua(var) do
+    Logging.debug("var:~p", [var])
+
+    var =
+      Utilities.iter_over_all_iterables(
+        var,
+        fn item ->
+          case item do
+            {:function, f} ->
+              fn a, s ->
+                {[f.(a)], s}
+              end
+
+            _ ->
+              item
+          end
+        end,
+        false
+      )
+
     v1 = Utilities.nested_tuple_to_list(var)
     v2 = Utilities.Conversion.nested_map_to_tuple_list(v1)
+    Logging.debug("retuens:~p", [v2])
     v2
   end
 
