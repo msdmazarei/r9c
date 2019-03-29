@@ -74,6 +74,43 @@ defmodule OnlineChargingSystem.Servers.Diameter.TcpServer do
   end
 
   @impl true
+  def handle_call(
+        :packets_stat,
+        _from,
+        state = %{
+          @connected_client_pids => connected_client_pids
+        }
+      ) do
+    per_client =
+      connected_client_pids
+      |> Enum.map(fn xpid ->
+        s = :sys.get_state(xpid)
+
+        %{
+          "in" => s["stats_in_packets"],
+          "out" => s["stats_out_packets"],
+          "client_address" => s["client_address"]
+        }
+      end)
+
+    {in_, out_} =
+      per_client
+      |> Enum.reduce({0, 0}, fn m, {i, o} ->
+        {i + (m["in"] || 0), o + (m["out"] || 0)}
+      end)
+
+    {
+      :reply,
+      %{
+        "per_client" => per_client,
+        "in" => in_,
+        "out" => out_
+      },
+      state
+    }
+  end
+
+  @impl true
   def handle_info(
         :check_for_incoming_connection,
         state = %{
@@ -182,10 +219,13 @@ defmodule OnlineChargingSystem.Servers.Diameter.TcpServer do
             end
 
           false ->
-            Logging.debug("received exit from non-client process. let ignore it. reason:~p,pid:~p", [
-              reason,
-              client_pid
-            ])
+            Logging.debug(
+              "received exit from non-client process. let ignore it. reason:~p,pid:~p",
+              [
+                reason,
+                client_pid
+              ]
+            )
 
             {:noreply, state}
         end

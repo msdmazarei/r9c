@@ -15,7 +15,7 @@ end
 --                  and will returns PackageInstance
 -- deactivation_func: a function has form: function(username: string, identifier: string). it will be called
 --                      when we want to expire a package instance
--- accouting_request_process_func: a function has form:: function ( init: PackageInstance , accounting_request: AccountingRequest) : AccountingResponse
+-- accouting_request_process_func: a function has form:: function ( init: PackageInstance , accounting_request: AccountingRequest) : boolean,  AccountingResponse
 function PackageDefinition:create(name, activation_func, deactivation_func, accounting_process_func)
     local rtn = {
         name = name,
@@ -55,4 +55,8 @@ function PackageDefinition:assign_to_user( username, identifier, priority, activ
     print("assign to user called. for user:",username)
     print("type of activation_func:",type(self.activation_func))
     return self.activation_func(username, identifier, priority, activation_props)
+end
+function PackageDefinition:process_acct( pkg_inst, acct_req )
+    print("PackageDefinition:process_acct called.")
+    return self.accounting_process_func(pkg_inst, acct_req)
 end

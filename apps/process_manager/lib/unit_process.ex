@@ -46,8 +46,8 @@ defmodule ProcessManager.UnitProcess.GeneralUnitProcess do
             http_call_limit: @module_config[:cel_script_limitation][:http_call_limit]
           },
           last_cel_result: nil,
-          script_imutable_vars: nil
-        )
+          script_imutable_vars: nil,
+          processed_messages: 0        )
       end
 
       def start_link(state, opts) do
@@ -193,11 +193,12 @@ defmodule ProcessManager.UnitProcess.GeneralUnitProcess do
             {:ingress, msg},
             _from,
             state = %State{
-              process_name: process_name
+              process_name: process_name,
+              processed_messages: processed_messages
             }
           ) do
         identifier = ProcessManager.UnitProcess.Identifier.get_identifier(msg)
-        Logging.debug("pname: ~p -> ingress msg :~p arrived", [process_name, msg])
+        # Logging.debug("pname: ~p -> ingress msg :~p arrived", [process_name, msg])
         Logging.debug("pname: ~p -> id:~p ", [process_name, identifier])
 
         rtn =
@@ -244,7 +245,8 @@ defmodule ProcessManager.UnitProcess.GeneralUnitProcess do
             state = %State{
               state
               | last_arrived_message_time: Utilities.now(),
-                last_cel_result: script_result
+                last_cel_result: script_result,
+                processed_messages: processed_messages + 1
             }
 
             state = update_last_10_processed_messages(state, msg)

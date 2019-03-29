@@ -6,6 +6,7 @@ defmodule Utilities do
   require Utilities.Logging
   alias Utilities.Logging
 
+
   @doc """
   Hello world.
 
@@ -27,6 +28,10 @@ defmodule Utilities do
   @spec randseed() :: any()
   def randseed do
     :rand.seed(:exs1024s)
+  end
+
+  def randint(n) do
+    :rand.uniform(n)
   end
 
   @doc """

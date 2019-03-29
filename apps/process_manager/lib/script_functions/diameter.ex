@@ -27,14 +27,9 @@ defmodule ProcessManager.Script.Functionalities.Diameter do
     Logging.debug("called.", [])
     [avp] = args
 
-    %Utilities.Parsers.Diameter.AVP{
-      avp_length: avp_len,
-      bin_value: bin_value
-    } = Script.to_elixir(avp)
+    dia_avp = Script.to_elixir(avp)
 
-    avp_value_len = avp_len - (4 + 1 + 3)
-    <<str_val::binary-size(avp_value_len), _::binary>> = bin_value
-    Logging.debug("rtn_value:~p", [str_val])
+    str_val = Utilities.Parsers.Diameter.avp_octet_string_value(dia_avp)
     {[str_val], state}
   end
 

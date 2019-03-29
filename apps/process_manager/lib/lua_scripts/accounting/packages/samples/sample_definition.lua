@@ -4,6 +4,9 @@ require "utils"
 require "utils/string"
 require "accounting/ocs_account"
 require "accounting/packages/user_packages"
+require "accounting/accounting_response"
+require "accounting/accounting_request"
+
 pkg_name = "regular_adsl_internet_ratio"
 
 -- will return true, PackageInstance Object or false, error
@@ -113,10 +116,125 @@ end
 function deactive(username, identifier)
 end
 
-function process_accounting_request(init_vars, acc_req)
-    -- body
+function reject_cause_of_not_account(acc_req)
+    print("sample definition - user has no account to connect")
+    local acc_res = AccountingResponse:create(400, acc_req.username, {}, {})
+
+    if acc_req.gateway_model == "mikrotik" then
+        acc_res.result_props["code"] = "ok"
+        acc_res.result_props["desc"] = "no account"
+    end
+
+    print("returns acc_res rejected")
+    return acc_res
 end
 
+function accept_connection(pkg_instance, acc_req)
+    print("accept_connection called.")
+    local acc_res = AccountingResponse:create(200, acc_req.username, {}, {})
+    if acc_req.gateway_model == "mikrotik" then
+        acc_res.result_props["speed"] = pkg_instance["accounting_request_processing_data"]["speed"] or 1024
+    end
+    return acc_res
+end
+
+function accept_acct_req(pkg_instance, acc_req)
+    print("accept_acct_req called.")
+    local acc_res = AccountingResponse:create(200, acc_req.username, {}, {})
+    if acc_req.gateway_model == "mikrotik" then
+        acc_res.result_props["acct_accept"] = "ok"
+    end
+    return acc_res
+end
+
+function process_accounting_request(pkg_instance, acc_req)
+    local SECOND = 1000
+
+    print("process_accounting_request called.")
+    print("acc_req:", dump(acc_req))
+    print("pkg_instance:", dump(pkg_instance))
+    local account_type = "fixed_internet_traffic"
+
+    if acc_req.request_type == "start" then
+        print("request type is start")
+        --check user has account to connect
+        local user_acc = OCSAccount.get(acc_req.username, account_type)
+        if user_acc == nil then
+            acc_res = reject_cause_of_not_account(acc_req)
+            return false, acc_res
+        end
+
+        if user_acc:get_amount_till(cel.utils.unixepoch_now() + 10 * SECOND) <= 0 then
+            acc_res = reject_cause_of_not_account(acc_req)
+            return false, acc_res
+        end
+        return true, accept_connection(pkg_instance, acc_req)
+    end
+
+    if acc_req.request_type == "intrim" then
+        print("request type is intrim")
+        local user_acc = OCSAccount.get(acc_req.username, account_type)
+        if user_acc == nil then
+            acc_res = reject_cause_of_not_account(acc_req)
+            return false, acc_res
+        end
+
+        if user_acc:get_amount_till(cel.utils.unixepoch_now() + 10 * SECOND) <= 0 then
+            acc_res = reject_cause_of_not_account(acc_req)
+            return false, acc_res
+        end
+
+        local uploaded_bytes = 0
+        local downloaded_bytes = 0
+
+        -- gateway specific
+        if acc_req.gateway_model == "mikrotik" then
+            uploaded_bytes = acc_req.gateway_accounting_props["UPLOADED"]
+            downloaded_bytes = acc_req.gateway_accounting_props["DOWNLOADED"]
+        end
+
+        local total_bytes = uploaded_bytes + downloaded_bytes
+        print("intrim - total bytes:", total_bytes)
+        local remains = user_acc:dec(total_bytes)
+        print("intrim - remains:", remains)
+        if remains == 0 then
+            user_acc:save()
+            return true, accept_acct_req(pkg_instance, acc_req)
+        else
+            -- pass remains to next package
+            -- to do
+            print("generating new accounting request")
+            local new_acc_req =
+                AccountingRequest:create(
+                acc_req.username,
+                acc_req.request_type,
+                acc_req.gateway_model,
+                acc_req.gateway_tags_list,
+                acc_req.gateway_accounting_props,
+                acc_req.aditional_props
+            )
+            new_acc_req.gateway_accounting_props["UPLOADED"] = remains / 2
+            new_acc_req.gateway_accounting_props["DOWNLOADED"] = remains / 2
+            new_acc_req.aditional_props = new_acc_req.aditional_props or {}
+            new_acc_req.aditional_props["orig_acc_req"] = acc_req
+
+            local acc_res = reject_cause_of_not_account(acc_req)
+            print("return false and table (req,res)")
+            return false, {
+                request = new_acc_req,
+                response = acc_res
+            }
+        end
+    end
+
+    if acc_req.request_type == "stop" then
+    end
+
+    print("process_accounting_request - unknown accounting type")
+    return false, "accounting request type is unknown"
+end
+function is_expired(username, pkg_instance)
+end
 new_pkg_def = PackageDefinition:create(pkg_name, activation, deactive, process_accounting_request)
 
 success, result = new_pkg_def:save()

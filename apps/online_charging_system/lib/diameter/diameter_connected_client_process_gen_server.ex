@@ -17,6 +17,8 @@ defmodule OnlineChargingSystem.Servers.Diameter.ConnectedClientProcess do
   @received_bytes "received_bytes"
   @sent_bytes "sent_bytes"
   @trefs "trefs"
+  @stats_in_packets "stats_in_packets"
+  @stats_out_packets "stats_out_packets"
 
   @last_arrived_message_timestamp "last_arrived_message_timestamp"
 
@@ -43,8 +45,34 @@ defmodule OnlineChargingSystem.Servers.Diameter.ConnectedClientProcess do
        @sent_bytes => 0,
        @client_ip => client_ip_address_string,
        @client_port => client_port,
-       @trefs => [tref_read, tref_send, tref_process]
+       @trefs => [tref_read, tref_send, tref_process],
+       @stats_in_packets => 0,
+       @stats_out_packets => 0
      }}
+  end
+  @impl true
+  def handle_call(
+        {:send_diameter_packet, diameter_packet = %Utilities.Parsers.Diameter.DiameterPacket{}},
+        _from,
+        state = %{
+          @output_buffer => output_buffer,
+          @stats_out_packets => stats_out_packets
+        }
+      ) do
+    Logging.debug("a diameter to send received ")
+    Logging.info("+++++++ DIAMETER SEND REQUEST +++++++ ")
+
+    dia_bin = diameter_packet |> Utilities.Parsers.Diameter.serialize_to_bin()
+    Logging.debug("successfully converted to binary")
+    new_output_buffer = <<output_buffer::binary, dia_bin::binary>>
+    Logging.info("DIAMETER TO SEND ADDED ")
+
+    new_state =
+      state
+      |> Map.put(@output_buffer, new_output_buffer)
+      |> Map.put(@stats_out_packets, stats_out_packets + 1)
+
+    {:reply,:ok, new_state}
   end
 
   @impl true
@@ -96,12 +124,24 @@ defmodule OnlineChargingSystem.Servers.Diameter.ConnectedClientProcess do
   @impl true
   def handle_info(
         {:send_diameter_packet, diameter_packet = %Utilities.Parsers.Diameter.DiameterPacket{}},
-        state = %{@output_buffer => output_buffer}
+        state = %{
+          @output_buffer => output_buffer,
+          @stats_out_packets => stats_out_packets
+        }
       ) do
     Logging.debug("a diameter to send received ")
+    Logging.info("+++++++ DIAMETER SEND REQUEST +++++++ ")
+
     dia_bin = diameter_packet |> Utilities.Parsers.Diameter.serialize_to_bin()
+    Logging.debug("successfully converted to binary")
     new_output_buffer = <<output_buffer::binary, dia_bin::binary>>
-    new_state = state |> Map.put(@output_buffer, new_output_buffer)
+    Logging.info("DIAMETER TO SEND ADDED ")
+
+    new_state =
+      state
+      |> Map.put(@output_buffer, new_output_buffer)
+      |> Map.put(@stats_out_packets, stats_out_packets + 1)
+
     {:noreply, new_state}
   end
 
@@ -112,13 +152,14 @@ defmodule OnlineChargingSystem.Servers.Diameter.ConnectedClientProcess do
           @input_buffer => input_buffer,
           @client => client,
           @input_packets => input_packets,
-          @received_bytes => received_bytes
+          @received_bytes => received_bytes,
+          @stats_in_packets => stats_in_packets
         }
       ) do
     case read_from_tcp_socket(client, input_buffer, received_bytes) do
-      {:terminate,reason} ->
-        Logging.debug("stopping server cause of:~p",[reason])
-        {:stop, {:reason,reason}, state}
+      {:terminate, reason} ->
+        Logging.debug("stopping server cause of:~p", [reason])
+        {:stop, {:reason, reason}, state}
 
       {rest_buf, dia_packets, received_bytes} ->
         new_state =
@@ -126,6 +167,7 @@ defmodule OnlineChargingSystem.Servers.Diameter.ConnectedClientProcess do
           |> Map.put(@input_buffer, rest_buf)
           |> Map.put(@input_packets, input_packets ++ dia_packets)
           |> Map.put(@received_bytes, received_bytes)
+          |> Map.put(@stats_in_packets, stats_in_packets + length(dia_packets))
 
         new_state =
           if length(dia_packets) > 0 do
@@ -151,6 +193,8 @@ defmodule OnlineChargingSystem.Servers.Diameter.ConnectedClientProcess do
       ) do
     new_state =
       if byte_size(output_buffer) > 0 do
+        Logging.debug("flushing buffer to socket ...")
+
         case :gen_tcp.send(client, output_buffer) do
           :ok ->
             sent_bytes = sent_bytes + byte_size(output_buffer)
@@ -207,7 +251,11 @@ defmodule OnlineChargingSystem.Servers.Diameter.ConnectedClientProcess do
 
     case script_state.last_cel_result do
       {:return, [dia_packet = %Utilities.Parsers.Diameter.DiameterPacket{}]} ->
-        send(pid, {:send_diameter_packet, dia_packet})
+        Logging.info("send dia_packet to process:~p", [pid])
+        # GenServer.call(pid,{:send_diameter_packet, dia_packet})
+        r=:rpc.call(pid|>node, GenServer, :call, [pid,{:send_diameter_packet, dia_packet}],5000)
+        Logging.info("result rpc call:~p",[r])
+        # send(pid, {:send_diameter_packet, dia_packet})
 
       v ->
         Logging.warn("unexpected result from script: ~p", [v])
@@ -252,7 +300,7 @@ defmodule OnlineChargingSystem.Servers.Diameter.ConnectedClientProcess do
 
       {:error, reason} ->
         Logging.debug("problem in client socket reading. reason:~p. kill me", [reason])
-        {:terminate,reason}
+        {:terminate, reason}
 
       # Process.exit(self()ormal)
 

@@ -54,6 +54,18 @@ function UserPackages.get_for_update(username)
         return rtn
     end
 end
+
+function UserPackages.get_from_db(username)
+    local key = UserPackages.get_db_key(username)
+    local rtn = cel.kvdb.get(key)
+    if rtn == nil then
+        return rtn
+    else
+        setmetatable(rtn, UserPackages_mt)
+        return rtn
+    end
+end
+
 function UserPackages:save()
     print("UserPackages:save called.")
     print(dump(self.username))

@@ -56,16 +56,16 @@ function DiameterAVP.get_class_metatable()
 end
 
 function DiameterAVP:get_uint32_value()
-    print("get_unit_32_called")
+    --print("get_unit_32_called")
     self:test_cel_function()
     return cel.diameter.avp_value(self.bin_value, DIAMETER_AVP_TYPE.Unsigned32)
 end
 function DiameterAVP:get_string_value()
-    print("get_string_value called.")
+    --print("get_string_value called.")
     return cel.diameter.avp_octet_string(self)
 end
 function DiameterAVP:test_cel_function()
-    print(cel.diameter.test_function())
+    --print(cel.diameter.test_function())
 
     return 0
 end

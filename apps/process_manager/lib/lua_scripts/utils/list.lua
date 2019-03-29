@@ -1,7 +1,7 @@
 require("utils/base")
 function list_length(l)
     if type(l) == "table" then
-       return #l
+        return #l
     end
     return -1
 end
@@ -34,7 +34,6 @@ function list_elems(l)
     end, l, true
 end
 
-
 --- Filter a list according to a predicate.
 -- @param p predicate (function of one argument returning a boolean)
 -- @param l list of lists
@@ -44,14 +43,23 @@ function list_filter(p, l)
     return _G.filter(p, list_elems, l)
 end
 
-
 --- Append an item to a list.
 -- @param l table
 -- @param x item
 -- @return <code>{l[1], ..., l[#l], x}</code>
-function list_append (l, x)
-    local r = {unpack (l)}
-    table.insert (r, x)
+function list_append(l, x)
+    local r = {unpack(l)}
+    table.insert(r, x)
     return r
-  end
-  
+end
+
+function list_has_shared_item(l1, l2)
+    local rtn = false
+    for _, v in pairs(l1) do
+        if list_contains(l2, v) then
+            rtn = true
+            break
+        end
+    end
+    return rtn
+end

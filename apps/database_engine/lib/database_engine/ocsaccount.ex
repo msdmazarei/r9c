@@ -9,7 +9,7 @@ defmodule DatabaseEngine.Interface.OCSAccount do
     set a new kv. Timeout is not implemented yet.
   """
   def set(k, v, _timeout \\ :infinity) do
-    Logging.debug("Called"  )
+    # Logging.debug("Called"  )
     pck = {OCSAccount, k, v}
 
     opt = fn ->

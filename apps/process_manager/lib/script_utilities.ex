@@ -4,6 +4,9 @@ defmodule ProcessManager.Script.Utilities do
   alias Utilities.Logging
   require Utilities
 
+  def to_lua(nil) do
+    nil
+  end
   def to_lua(var) when is_number(var) or is_binary(var) do
     var
   end
@@ -24,7 +27,7 @@ defmodule ProcessManager.Script.Utilities do
           case item do
             {:function, f} ->
               fn a, s ->
-                {[f.(a)], s}
+                {f.(a), s}
               end
 
             _ ->

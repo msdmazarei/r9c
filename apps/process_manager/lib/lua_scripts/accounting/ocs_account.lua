@@ -1,6 +1,6 @@
 OCSAccount = {}
 OCSAccount_mt = {__index = OCSAccount}
-
+-- require("utils")
 function OCSAccount:create(username, account_type, expiredate_epoch, amount)
     -- body
     -- print("create called.")
@@ -62,11 +62,11 @@ end
 
 function OCSAccount:save()
     local key = self:get_db_key()
-    print("account key:", key, "saved")
+    -- print("account key:", key, "saved")
     local old_db_record = cel.ocs_account.get_for_update(key)
-    print("after get for update")
+    -- print("after get for update")
     local new_db_record = self:get_db_value(old_db_record)
-    print("after get_db_value")
+    -- print("after get_db_value")
     local n = cel.utils.unixepoch_now()
     new_db_record["last_update"] = n
     new_db_record:remove_before_when(n)
@@ -102,11 +102,15 @@ end
 
 function OCSAccount:get_amount_till(target_epoch)
     local sum = 0
-    for k, v in ipairs(self.values) do
-        if k <= target_epoch then
+    -- print("OCSAccount:get_amount_till - self:",dump(self))
+    for k, v in pairs(self.values) do
+        -- print("get_amount_till loop on k:",k, "target epoch:",target_epoch)
+       --sum over all which expire after target_epoch
+        if k >= target_epoch then
             sum = sum + (v["amount"] or 0)
         end
     end
+    -- print("OCSAccount:get_amount_till rtn:", sum)
     return sum
 end
 
@@ -125,7 +129,7 @@ function OCSAccount:add_with_data(amount, when, data)
 end
 
 function OCSAccount:dec(amount)
-    print("called")
+    -- print("called")
     local remain = amount
     local updated_keys = {}
     for k, v in pairs(self.values) do
@@ -137,6 +141,7 @@ function OCSAccount:dec(amount)
 
         if account_amount >= remain then
             updated_keys[k] = account_amount - remain
+            print("k:",k,"updated to:",updated_keys[k])
             remain = 0
             break
         else
@@ -149,20 +154,23 @@ function OCSAccount:dec(amount)
         self.values[k]["amount"] = v
     end
 
-    return remain == 0
+    return remain 
 end
 
 function OCSAccount:remove_before_when(when)
-    cel.utils.debug_print({before = self})
-print("remove_before_when called.")
+    -- cel.utils.debug_print({before = self})
+-- print("remove_before_when called.")
     local rtn = {}
     for k, v in pairs(self.values) do
-    
         local account_amount = v["amount"] or 0
+        -- print("remove_before_when checking k:",k,"and when:",when,", k>when",k>when,"amount:",account_amount)
+    
         if k > when and account_amount > 0 then
+            -- print("add it to rtn values k:v",k,dump(v))
             rtn[k] = v
         end
     end
+    -- print("finally rtn:",dump(rtn))
     self.values = rtn
 end
 
