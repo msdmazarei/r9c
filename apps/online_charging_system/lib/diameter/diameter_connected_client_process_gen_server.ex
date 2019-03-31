@@ -19,21 +19,27 @@ defmodule OnlineChargingSystem.Servers.Diameter.ConnectedClientProcess do
   @trefs "trefs"
   @stats_in_packets "stats_in_packets"
   @stats_out_packets "stats_out_packets"
+  @process_name "process_name"
 
   @last_arrived_message_timestamp "last_arrived_message_timestamp"
 
   @impl true
   def init(%{"client" => client_socket, "config" => client_configs}) do
-    Logging.debug("Calld")
+    Logging.debug("Calld.")
     {:ok, {client_ip_tuple, client_port}} = :inet.peername(client_socket)
     client_ip_address_string = Utilities.Conversion.ip_address_tuple_to_string(client_ip_tuple)
     {:ok, tref_read} = :timer.send_interval(10, :read_socket)
     {:ok, tref_send} = :timer.send_interval(10, :send_to_socket)
     {:ok, tref_process} = :timer.send_interval(10, :process_received_packets)
     Logging.debug("return started successfully")
+    now = Utilities.now()
+    pname = "#{now};diameter_client::#{client_ip_address_string}:#{client_port}"
+    pname = String.to_atom(pname)
+    Process.register( self(),pname)
 
     {:ok,
      %{
+       @process_name => pname,
        @client => client_socket,
        @client_address => "#{client_ip_address_string}:#{client_port}",
        @client_config => client_configs,
@@ -50,6 +56,7 @@ defmodule OnlineChargingSystem.Servers.Diameter.ConnectedClientProcess do
        @stats_out_packets => 0
      }}
   end
+
   @impl true
   def handle_call(
         {:send_diameter_packet, diameter_packet = %Utilities.Parsers.Diameter.DiameterPacket{}},
@@ -60,19 +67,19 @@ defmodule OnlineChargingSystem.Servers.Diameter.ConnectedClientProcess do
         }
       ) do
     Logging.debug("a diameter to send received ")
-    Logging.info("+++++++ DIAMETER SEND REQUEST +++++++ ")
+    # Logging.info("+++++++ DIAMETER SEND REQUEST +++++++ ")
 
     dia_bin = diameter_packet |> Utilities.Parsers.Diameter.serialize_to_bin()
     Logging.debug("successfully converted to binary")
     new_output_buffer = <<output_buffer::binary, dia_bin::binary>>
-    Logging.info("DIAMETER TO SEND ADDED ")
+    # Logging.info("DIAMETER TO SEND ADDED ")
 
     new_state =
       state
       |> Map.put(@output_buffer, new_output_buffer)
       |> Map.put(@stats_out_packets, stats_out_packets + 1)
 
-    {:reply,:ok, new_state}
+    {:reply, :ok, new_state}
   end
 
   @impl true
@@ -84,7 +91,8 @@ defmodule OnlineChargingSystem.Servers.Diameter.ConnectedClientProcess do
           @client_config => client_config,
           @client_address => client_address,
           @client_ip => client_ip,
-          @client_port => client_port
+          @client_port => client_port,
+          @process_name => pname
         }
       ) do
     input_packets
@@ -105,7 +113,7 @@ defmodule OnlineChargingSystem.Servers.Diameter.ConnectedClientProcess do
           internal_callback: %DatabaseEngine.Models.InternalCallback{
             module_name: __MODULE__,
             function_name: :send_response_back_to_client,
-            arguments: [:erlang.pid_to_list(self())]
+            arguments: [{node(), pname}]
           }
         }
 
@@ -130,12 +138,12 @@ defmodule OnlineChargingSystem.Servers.Diameter.ConnectedClientProcess do
         }
       ) do
     Logging.debug("a diameter to send received ")
-    Logging.info("+++++++ DIAMETER SEND REQUEST +++++++ ")
+    # Logging.info("+++++++ DIAMETER SEND REQUEST +++++++ ")
 
     dia_bin = diameter_packet |> Utilities.Parsers.Diameter.serialize_to_bin()
     Logging.debug("successfully converted to binary")
     new_output_buffer = <<output_buffer::binary, dia_bin::binary>>
-    Logging.info("DIAMETER TO SEND ADDED ")
+    # Logging.info("DIAMETER TO SEND ADDED ")
 
     new_state =
       state
@@ -224,7 +232,14 @@ defmodule OnlineChargingSystem.Servers.Diameter.ConnectedClientProcess do
   end
 
   @impl true
-  def terminate(reason, state) do
+  def handle_info(msg, state) do
+    Logging.info("---------- MSG NOT HANDLEED ARRIVED:~p", [msg])
+    {:noreply, state}
+  end
+
+  @impl true
+  def terminate(reason, state = %{@process_name => pname}) do
+    Process.unregister(pname)
     Logging.debug("Called. reason:~p", [reason])
     release_resources(state)
     state
@@ -239,22 +254,17 @@ defmodule OnlineChargingSystem.Servers.Diameter.ConnectedClientProcess do
     :gen_tcp.close(client)
   end
 
-  def send_response_back_to_client(pid, script_state) do
-    Logging.debug("Called. pid:~p scr:~p", [pid, script_state.last_cel_result])
+  def send_response_back_to_client({n,pn}, script_state) do
+    Logging.debug("Called. cun: ~p r-pid:~p scr:~p", [node(),{n,pn}, script_state.last_cel_result])
 
-    pid =
-      if is_pid(pid) do
-        pid
-      else
-        :erlang.list_to_pid(Utilities.to_erl_list(pid))
-      end
 
     case script_state.last_cel_result do
       {:return, [dia_packet = %Utilities.Parsers.Diameter.DiameterPacket{}]} ->
-        Logging.info("send dia_packet to process:~p", [pid])
+        # Logging.info("send dia_packet to process:~p", [pid])
         # GenServer.call(pid,{:send_diameter_packet, dia_packet})
-        r=:rpc.call(pid|>node, GenServer, :call, [pid,{:send_diameter_packet, dia_packet}],5000)
-        Logging.info("result rpc call:~p",[r])
+        # r=:rpc.call(pid|>node, GenServer, :call, [pid,{:send_diameter_packet, dia_packet}],5000)
+        # Logging.info("result rpc call:~p")
+        :erlang.send({pn,n}, {:send_diameter_packet, dia_packet})
         # send(pid, {:send_diameter_packet, dia_packet})
 
       v ->

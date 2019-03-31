@@ -41,12 +41,9 @@ defmodule OnlineChargingSystem.Diameter.LoadClient do
         }
       ) do
     Logging.info(
-      "~n funcname: ~p ~n last_sent:~p ~n expire:~p~n ack:~p~n expired_count:~p in_pkts:~p sent_pkts:~p~n-------------~n",
+      "~n funcname: ~p ~n expired_count:~p in_pkts:~p sent_pkts:~p~n-------------~n",
       [
         func_name,
-        last_sent_epoch,
-        expire_map,
-        wait_for_ack,
         expired_count,
         rcvd_pkt,
         sent_pkts
@@ -102,11 +99,11 @@ defmodule OnlineChargingSystem.Diameter.LoadClient do
       )
 
     Logging.debug("connected  successfully")
-    {:ok, tref_check_in_data} = :timer.send_interval(300, :read_socket)
-    {:ok, tref_send_data} = :timer.send_interval(300, :send_to_socket)
+    {:ok, tref_check_in_data} = :timer.send_interval(100, :read_socket)
+    {:ok, tref_send_data} = :timer.send_interval(100, :send_to_socket)
     {:ok, tref_send_req} = :timer.send_interval(3000, :send_req)
     {:ok, tref_check_expire} = :timer.send_interval(3000, :check_expire)
-    {:ok, tref_process_in_packets} = :timer.send_interval(1000, :process_in_packets)
+    {:ok, tref_process_in_packets} = :timer.send_interval(100, :process_in_packets)
 
     {:ok,
      %{
