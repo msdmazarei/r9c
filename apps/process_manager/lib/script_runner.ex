@@ -78,12 +78,12 @@ defmodule ProcessManager.Script do
   end
 
   @compile {:inline, get_orig_message: 1}
-  defp get_orig_message(_state) do
+  def get_orig_message(_state) do
     Process.get(@orig_message_key)
   end
 
   @compile {:inline, set_orig_message: 2}
-  defp set_orig_message(msg, _state) do
+  def set_orig_message(msg, _state) do
     Process.put(@orig_message_key, msg)
   end
 
