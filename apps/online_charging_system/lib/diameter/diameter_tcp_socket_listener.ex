@@ -89,6 +89,9 @@ defmodule OnlineChargingSystem.Servers.Diameter.TcpServer do
         %{
           "in" => s["stats_in_packets"],
           "out" => s["stats_out_packets"],
+          "stats_drop_packets"=>s["stats_drop_packets"],
+          "stats_enqueue_packets"=>s["stats_enqueue_packets"],
+          "stats_reprocess_packets"=>s["stats_reprocess_packets"],
           "client_address" => s["client_address"]
         }
       end)

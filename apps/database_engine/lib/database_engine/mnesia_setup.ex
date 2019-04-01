@@ -108,7 +108,7 @@ defmodule DatabaseEngine.Mnesia.DbSetup do
     {AppTb, [:idx, :service_idx, :apikeys, :options, :_internal]},
     {ApikeyTb, [:idx, :key_idx, :net_acl_idx, :options, :_internal]},
     {ProcessTb, [:idx, :model]},
-    {OCSAccount,[ :idx, :lua_ocs_account]},
+    {OCSAccount, [:idx, :lua_ocs_account]},
     {SubscriptionTb,
      [
        :idx,
@@ -124,7 +124,36 @@ defmodule DatabaseEngine.Mnesia.DbSetup do
     {KVTb, [:key, :value]}
   ]
 
+  ############################# LOCAL INMEMORY TABLES #############################
+  @local_in_memory_table [
+    {LKVTb, [:key, :value]}
+  ]
+
+  def create_local_in_memory_table do
+    for tdata <- @local_in_memory_table do
+      name = tdata |> elem(0)
+      attrs = tdata |> elem(1)
+      idxs = attrs |> Enum.filter(fn x -> x |> to_string |> String.ends_with?("_idx") end)
+
+      case :mnesia.create_table(name, [
+             {:ram_copies, Utilities.all_active_nodes()},
+             {:local_content, true},
+             {:type, :ordered_set},
+             attributes: attrs,
+             index: idxs
+           ]) do
+        {:atomic, :ok} ->
+          Logger.info(fn -> "#{name} table created." end)
+
+        {:aborted, {:already_exists, name}} ->
+          Logger.debug(fn -> "#{name} table is available." end)
+      end
+    end
+  end
+
   def create_tables do
+    create_local_in_memory_table()
+
     for tdata <- @table_config do
       name = tdata |> elem(0)
       attrs = tdata |> elem(1)
