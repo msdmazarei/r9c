@@ -436,7 +436,9 @@ defmodule OnlineChargingSystem.Servers.Diameter.ConnectedClientProcess do
             buffers
             |> Enum.map(fn bfn ->
               Logging.debug("trying buf:~p", [bfn])
-              {bys, pkt_count} = fetch_and_empty_output_buffer(state, bfn) || {<<>>, 0}
+              # nested transaction with infility loop will lock all
+              # buffers and reduce performce
+              {bys, pkt_count} = once_fetch_and_empty_output_buffer(state, bfn) || {<<>>, 0}
 
               Logging.debug("cheking out buf:~p bys-len:~p pkt:~p", [
                 bfn,
@@ -636,6 +638,38 @@ defmodule OnlineChargingSystem.Servers.Diameter.ConnectedClientProcess do
             Logging.warn("problem to stroe to local tb LKV. cause:~p", [err])
             false
         end
+    end
+  end
+
+  def once_fetch_and_empty_output_buffer(
+        _state = %{@process_name => pname},
+        buf_no
+      ) do
+    Logging.debug("called. buf_no:~p, pname:~p", [buf_no, pname])
+    key = "out_buffer_#{pname}_#{buf_no}"
+    Logging.debug("out buffer key:~p", [key])
+
+    r =
+      :mnesia.transaction(
+        fn ->
+          {old_bys, old_count} =
+            case DatabaseEngine.Interface.LKV.get_for_update(key) do
+              {b, c} when is_binary(b) and is_number(c) -> {b, c}
+              _ -> {<<>>, 0}
+            end
+
+          new_bys = <<>>
+          DatabaseEngine.Interface.LKV.set(key, {new_bys, 0})
+          {old_bys, old_count}
+        end,
+        [],
+        1
+      )
+
+    case r do
+      {:atomic, v} -> v
+      {:aborted, _} -> {<<>>, 0}
+      {v, c} when is_binary(v) -> {v, c}
     end
   end
 
