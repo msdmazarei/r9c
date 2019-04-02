@@ -89,9 +89,9 @@ defmodule OnlineChargingSystem.Servers.Diameter.TcpServer do
         %{
           "in" => s["stats_in_packets"],
           "out" => s["stats_out_packets"],
-          "stats_drop_packets"=>s["stats_drop_packets"],
-          "stats_enqueue_packets"=>s["stats_enqueue_packets"],
-          "stats_reprocess_packets"=>s["stats_reprocess_packets"],
+          "stats_drop_packets" => s["stats_drop_packets"],
+          "stats_enqueue_packets" => s["stats_enqueue_packets"],
+          "stats_reprocess_packets" => s["stats_reprocess_packets"],
           "client_address" => s["client_address"]
         }
       end)
@@ -211,7 +211,7 @@ defmodule OnlineChargingSystem.Servers.Diameter.TcpServer do
               socket_process_map
               |> Enum.find(fn {key, val} -> val == client_pid end)
 
-            if length(keys || []) > 0 do
+            if keys != nil do
               update_state.(keys |> elem(0))
             else
               Logging.debug("no socket found for this terminated process:~p. do nothing", [

@@ -4,6 +4,16 @@ defmodule DatabaseEngine.Interface.LKV do
   require Utilities.Logging
   alias Utilities.Logging
 
+  def transaction(func) do
+    case :mnesia.is_transaction() do
+      true ->
+        {:atomic, func.()}
+
+      false ->
+        :mnesia.transaction(func)
+    end
+  end
+
   @spec set(String.t(), any(), Integer.t()) :: :ok | {:error, Atom.t()}
   @doc """
     set a new kv. Timeout is not implemented yet.
@@ -33,7 +43,7 @@ defmodule DatabaseEngine.Interface.LKV do
     gets value of a key from KV
   """
   def get(key) do
-    Logging.debug("called. with key:~p",[key])
+    Logging.debug("called. with key:~p", [key])
     opt = fn -> :mnesia.read(LKVTb, key) end
     opd = fn -> :mnesia.dirty_read(LKVTb, key) end
 
@@ -46,15 +56,15 @@ defmodule DatabaseEngine.Interface.LKV do
           opd
       end
 
-      r = op.()
-      Logging.debug("rtn pre value:~p",[r])
+    r = op.()
+    Logging.debug("rtn pre value:~p", [r])
+
     case r do
       [{LKVTb, _, value}] ->
-        Logging.debug("matched. returns: ~p",[value])
+        Logging.debug("matched. returns: ~p", [value])
         value
 
       [] ->
-
         nil
     end
   end
