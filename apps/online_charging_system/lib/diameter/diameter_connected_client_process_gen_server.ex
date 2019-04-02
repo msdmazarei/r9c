@@ -29,7 +29,7 @@ defmodule OnlineChargingSystem.Servers.Diameter.ConnectedClientProcess do
   @bytes_convertor_pid "bytes_convertor_pid"
   @pkt_processor_pid "pkt_processor_pid"
   @last_arrived_message_timestamp "last_arrived_message_timestamp"
-
+  @stats "stats"
   @impl true
   def init(arg = %{"client" => client_socket, "config" => client_configs}) do
     Logging.debug("Calld.")
@@ -37,6 +37,7 @@ defmodule OnlineChargingSystem.Servers.Diameter.ConnectedClientProcess do
 
     {:ok, {client_ip_tuple, client_port}} = :inet.peername(client_socket)
     client_ip_address_string = Utilities.Conversion.ip_address_tuple_to_string(client_ip_tuple)
+    {:ok, tref_agg_stats} = :timer.send_interval(1000, :agg_stats)
     # {:ok, tref_read} = :timer.send_interval(100, :read_socket)
     # {:ok, tref_send} = :timer.send_interval(100, :send_to_socket)
     # {:ok, tref_process} = :timer.send_interval(300, :process_received_packets)
@@ -137,7 +138,8 @@ defmodule OnlineChargingSystem.Servers.Diameter.ConnectedClientProcess do
        @tcpreader_pid => tcpreader_pid,
        @tcpwriter_pid => tcpwriter_pid,
        @bytes_convertor_pid => bytes_convertor_pid,
-       @pkt_processor_pid => pkt_processor_pid
+       @pkt_processor_pid => pkt_processor_pid,
+       @stats => %{}
      }}
   end
 
@@ -164,6 +166,26 @@ defmodule OnlineChargingSystem.Servers.Diameter.ConnectedClientProcess do
       |> Map.put(@stats_out_packets, stats_out_packets + 1)
 
     {:reply, :ok, new_state}
+  end
+
+  @impl true
+  def handle_info(
+        :agg_stats,
+        state = %{
+          @tcpreader_pid => tcpreader_pid,
+          @tcpwriter_pid => tcpwriter_pid,
+          @bytes_convertor_pid => bytes_convertor_pid,
+          @pkt_processor_pid => pkt_processor_pid
+        }
+      ) do
+    processes = [tcpreader_pid, tcpwriter_pid, bytes_convertor_pid, pkt_processor_pid]
+
+    processes
+    |> Enum.map(fn x ->
+      send(x, {self(), :set_stats, :stats})
+    end)
+
+    {:noreply, state}
   end
 
   # @impl true
@@ -241,13 +263,28 @@ defmodule OnlineChargingSystem.Servers.Diameter.ConnectedClientProcess do
   #   {:noreply, state}
   # end
 
-  def handle_info({:update_stats, inc}, state) do
-    new_state =
+  def handle_info({:set_stats, inc}, state) do
+    stats =
       inc
       |> Map.to_list()
-      |> Enum.reduce(state, fn {k, v}, acc ->
+      |> Enum.reduce(state[@stats], fn {k, v}, acc ->
+        acc |> Map.put(k, v)
+      end)
+
+    new_state = state |> Map.put(@stats, stats)
+
+    {:noreply, new_state}
+  end
+
+  def handle_info({:update_stats, inc}, state) do
+    stats =
+      inc
+      |> Map.to_list()
+      |> Enum.reduce(state[@stats], fn {k, v}, acc ->
         acc |> Map.put(k, (acc[k] || 0) + v)
       end)
+
+    new_state = state |> Map.put(@stats, stats)
 
     {:noreply, new_state}
   end
