@@ -10,6 +10,21 @@ defmodule Dispatcher.Consumers.InQConsumer do
   require Utilities.Logging
   alias Utilities.Logging
 
+  @arrived_messages "arrived_messages"
+  @processed_messages "processed_messages"
+
+  def init(topic, partition) do
+    Logging.debug("Called. topic:~p partition:~p", [topic, partition])
+
+    {:ok,
+     %{
+       "topic" => topic,
+       "partition" => partition,
+       @arrived_messages => 0,
+       @processed_messages => 0
+     }}
+  end
+
   # note - messages are delivered in batches
   def handle_message_set(message_set, state) do
     Logging.debug("Called. message_set legth:~p", [message_set |> length])
@@ -31,7 +46,14 @@ defmodule Dispatcher.Consumers.InQConsumer do
 
     Logging.debug("call send messages by messages len:~p", [to_send_message |> length])
     Dispatcher.Process.send_messages(to_send_message)
+    processed_messages = (state[@processed_messages] || 0) + length(to_send_message)
+    arrived_messages = (state[@arrived_messages] || 0) + length(message_set)
 
-    {:async_commit, state}
+    new_state =
+      state
+      |> Map.put(@processed_messages, processed_messages)
+      |> Map.put(@arrived_messages, arrived_messages)
+
+    {:async_commit, new_state}
   end
 end

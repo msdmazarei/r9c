@@ -197,6 +197,78 @@ defmodule DatabaseEngine.DurableQueue do
       pid
     )
   end
+
+  def get_consumers_pid() do
+    list_of_sups =
+      DynamicSupervisor.which_children(
+        DatabaseEngine.DurableQueue.ConsumerGroupWorkers.Supervisor
+      )
+      |> Enum.map(fn {_, x, _, _} -> x end)
+
+    sup_states = list_of_sups |> Enum.map(&:sys.get_state/1)
+
+    consumer_sup_pids =
+      sup_states
+      |> Enum.map(fn x ->
+        {_, _, _, {_, %{:consumer => cons}}, _, _, _, _, _, _, _} = x
+        cons |> elem(1)
+      end)
+
+    consumer_sup_pids
+    |> Enum.map(fn x ->
+      {_, _, _, _, {_, cosumers_pid_map}, _, _, _, _, _, _} = :sys.get_state(x)
+
+      cosumers_pid_map
+      |> Map.to_list()
+      |> Enum.map(fn {k, v} -> {v |> Enum.at(2), v |> Enum.at(3), k} end)
+      |> Enum.reduce({nil, %{}}, fn x, acc ->
+        {na, k, v} = x
+
+        {_, ma} = acc
+        ma = ma |> Map.put(k, v)
+
+        acc = {na, ma}
+        acc
+      end)
+    end)
+  end
+
+  def get_consumers_stats() do
+    consumers = get_consumers_pid()
+
+    consumers
+    |> Enum.map(fn {qname, parts_map} ->
+      parts_stat =
+        parts_map
+        |> Map.to_list()
+        |> Enum.map(fn {part_no, part_pid} ->
+          stat =
+            case :sys.get_state(part_pid) do
+              %KafkaEx.GenConsumer.State{consumer_state: m} when is_map(m) ->
+                %{"arrived" => m["arrived_messages"], "processed" => m["processed_messages"]}
+
+              _ ->
+                %{"arrived" => 0, "processed" => 0}
+            end
+
+          {part_no, stat}
+        end)
+        |> Map.new()
+
+      {ta, tp} =
+        parts_stat
+        |> Map.to_list()
+        |> Enum.reduce({0, 0}, fn {_, m}, {t1, t2} ->
+          t1 = t1 + m["arrived"]
+          t2 = t2 + m["processed"]
+          {t1, t2}
+        end)
+
+      parts_stat = parts_stat |> Map.put("total", %{"arrived" => ta, "processed" => tp})
+
+      {qname, parts_stat}
+    end)
+  end
 end
 
 defprotocol DatabaseEngine.DurableQueue.Deserialize do
