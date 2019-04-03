@@ -245,26 +245,33 @@ defmodule DatabaseEngine.DurableQueue do
           stat =
             case :sys.get_state(part_pid) do
               %KafkaEx.GenConsumer.State{consumer_state: m} when is_map(m) ->
-                %{"arrived" => m["arrived_messages"], "processed" => m["processed_messages"]}
+                %{
+                  "arrived" => m["arrived_messages"],
+                  "processed" => m["processed_messages"],
+                  "process_duration" => m["process_duration"]
+                }
 
               _ ->
-                %{"arrived" => 0, "processed" => 0}
+                %{"arrived" => 0, "processed" => 0, "process_duration" => 0}
             end
 
           {part_no, stat}
         end)
         |> Map.new()
 
-      {ta, tp} =
+      {ta, tp, td} =
         parts_stat
         |> Map.to_list()
-        |> Enum.reduce({0, 0}, fn {_, m}, {t1, t2} ->
-          t1 = t1 + m["arrived"]
-          t2 = t2 + m["processed"]
-          {t1, t2}
+        |> Enum.reduce({0, 0, 0}, fn {_, m}, {t1, t2, t3} ->
+          t1 = t1 + (m["arrived"]||0)
+          t2 = t2 + (m["processed"]||0)
+          t3 = t3 + (m["process_duration"] || 0)
+          {t1, t2, t3}
         end)
 
-      parts_stat = parts_stat |> Map.put("total", %{"arrived" => ta, "processed" => tp})
+      parts_stat =
+        parts_stat
+        |> Map.put("total", %{"arrived" => ta, "processed" => tp, "process_duration" => td})
 
       {qname, parts_stat}
     end)

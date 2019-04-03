@@ -12,6 +12,7 @@ defmodule Dispatcher.Consumers.InQConsumer do
 
   @arrived_messages "arrived_messages"
   @processed_messages "processed_messages"
+  @process_duration "process_duration"
 
   def init(topic, partition) do
     Logging.debug("Called. topic:~p partition:~p", [topic, partition])
@@ -27,6 +28,8 @@ defmodule Dispatcher.Consumers.InQConsumer do
 
   # note - messages are delivered in batches
   def handle_message_set(message_set, state) do
+    st = Utilities.now()
+
     Logging.debug("Called. message_set legth:~p", [message_set |> length])
 
     to_send_message =
@@ -49,10 +52,13 @@ defmodule Dispatcher.Consumers.InQConsumer do
     processed_messages = (state[@processed_messages] || 0) + length(to_send_message)
     arrived_messages = (state[@arrived_messages] || 0) + length(message_set)
 
+    du = Utilities.now() - st + (state[@process_duration] || 0)
+
     new_state =
       state
       |> Map.put(@processed_messages, processed_messages)
       |> Map.put(@arrived_messages, arrived_messages)
+      |> Map.put(@process_duration, du)
 
     {:async_commit, new_state}
   end
