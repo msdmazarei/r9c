@@ -1,11 +1,17 @@
 defmodule DatabaseEngine.Interface.Process do
   @moduledoc false
 
+  require Logger
+  require Utilities.Logging
+  alias Utilities.Logging
+
   def breif_processes_state() do
-    all_process_states()|> Enum.map(fn {p,s}->
-      {p,s.process_name, s.processed_messages}
+    all_process_states()
+    |> Enum.map(fn {p, s} ->
+      {p, s.process_name, s.processed_messages}
     end)
   end
+
   def all_process_states() do
     all()
     |> Enum.map(fn k ->
@@ -14,8 +20,8 @@ defmodule DatabaseEngine.Interface.Process do
 
       case :rpc.call(p |> node, :sys, :get_state, [p], 1000) do
         {:error, _} -> nil
-        {:badrpc,_} -> nil
-        v -> {p,v}
+        {:badrpc, _} -> nil
+        v -> {p, v}
       end
 
       # if :rpc.call(p |> node, :erlang, :is_process_alive, [p]) do
@@ -34,6 +40,23 @@ defmodule DatabaseEngine.Interface.Process do
 
       false ->
         :mnesia.dirty_all_keys(ProcessTb)
+    end
+  end
+
+  def get_for_update(key) do
+    case :mnesia.is_transaction() do
+      true ->
+        case :mnesia.read(ProcessTb, key, :write) do
+          [{ProcessTb, _, value}] ->
+            value
+
+          _ ->
+            nil
+        end
+
+      false ->
+        Logging.error("try to read lock when we have no transaction context, key:~p", [key])
+        throw("no transaction context to read_and_write_lock functionan")
     end
   end
 

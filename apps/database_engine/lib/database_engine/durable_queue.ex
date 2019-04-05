@@ -248,30 +248,51 @@ defmodule DatabaseEngine.DurableQueue do
                 %{
                   "arrived" => m["arrived_messages"],
                   "processed" => m["processed_messages"],
-                  "process_duration" => m["process_duration"]
+                  "process_duration" => m["process_duration"],
+                  "dropped_messages_cause_of_retry" => m["dropped_messages_cause_of_retry"],
+                  "need_to_requeue_count" => m["need_to_requeue_count"],
+                  "process_creation_time" => m["process_creation_time"],
+                  "process_duration" => m["process_duration"],
+                  "send_message_to_process_time" => m["send_message_to_process_time"],
+                  "successfully_delivered_to_uprocess" => m["successfully_delivered_to_uprocess"]
                 }
 
               _ ->
-                %{"arrived" => 0, "processed" => 0, "process_duration" => 0}
+                %{
+                  "arrived" => 0,
+                  "processed" => 0,
+                  "process_duration" => 0,
+                  "dropped_messages_cause_of_retry" => 0,
+                  "need_to_requeue_count" => 0,
+                  "process_creation_time" => 0,
+                  "process_duration" => 0,
+                  "send_message_to_process_time" => 0,
+                  "successfully_delivered_to_uprocess" => 0
+                }
             end
 
           {part_no, stat}
         end)
         |> Map.new()
 
-      {ta, tp, td} =
+      total_res =
         parts_stat
         |> Map.to_list()
-        |> Enum.reduce({0, 0, 0}, fn {_, m}, {t1, t2, t3} ->
-          t1 = t1 + (m["arrived"]||0)
-          t2 = t2 + (m["processed"]||0)
-          t3 = t3 + (m["process_duration"] || 0)
-          {t1, t2, t3}
+        |> Enum.reduce(%{}, fn {_, m}, res ->
+
+          r =
+            m
+            |> Map.to_list()
+            |> Enum.reduce(res, fn {k, v}, acc ->
+              acc |> Map.put(k, (acc[k] || 0) + (v || 0))
+            end)
+
+          r
         end)
 
       parts_stat =
         parts_stat
-        |> Map.put("total", %{"arrived" => ta, "processed" => tp, "process_duration" => td})
+        |> Map.put("total", total_res)
 
       {qname, parts_stat}
     end)

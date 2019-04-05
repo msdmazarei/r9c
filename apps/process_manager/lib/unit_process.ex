@@ -47,7 +47,9 @@ defmodule ProcessManager.UnitProcess.GeneralUnitProcess do
           },
           last_cel_result: nil,
           script_imutable_vars: nil,
-          processed_messages: 0        )
+          processed_messages: 0,
+          arrived_messages: 0
+        )
       end
 
       def start_link(state, opts) do
@@ -272,6 +274,88 @@ defmodule ProcessManager.UnitProcess.GeneralUnitProcess do
         rtn
       end
 
+      def handle_cast(
+            {:process_message, msg},
+            state = %State{
+              process_name: process_name,
+              processed_messages: processed_messages
+            }
+          ) do
+        identifier = ProcessManager.UnitProcess.Identifier.get_identifier(msg)
+        # Logging.debug("pname: ~p -> ingress msg :~p arrived", [process_name, msg])
+        Logging.debug("pname: ~p -> id:~p ", [process_name, identifier])
+
+        rtn =
+          if state.last_10_processed_messages |> Enum.member?(msg.id) do
+            Logging.debug("pname: ~p -> message: ~p already processed.", [process_name, msg.id])
+            {:reply, true, state}
+          else
+            script = ProcessManager.UnitProcess.Identifier.get_script(msg, state)
+
+            new_state =
+              if __MODULE__.__info__(:functions)[:prepare_script_imutable_variables] != nil do
+                script_im_vars =
+                  Kernel.apply(__MODULE__, :prepare_script_imutable_variables, [msg, state])
+
+                %{state | script_imutable_vars: script_im_vars}
+              else
+                state
+              end
+
+            additional_functions =
+              if __MODULE__.__info__(:functions)[:additional_functions] != nil do
+                Kernel.apply(__MODULE__, :additional_functions, [msg, state])
+              else
+                %{}
+              end
+
+            script_result =
+              ProcessManager.Script.run_script(
+                script,
+                msg,
+                new_state,
+                additional_functions,
+                state.cel_script_limits.run_timeout || 5000
+              )
+
+            Logging.debug("pname: ~p -> script result: ~p", [process_name, script_result])
+
+            send_to_queue(
+              script_result,
+              msg,
+              state
+            )
+
+            state = %State{
+              state
+              | last_arrived_message_time: Utilities.now(),
+                last_cel_result: script_result,
+                processed_messages: processed_messages + 1
+            }
+
+            state = update_last_10_processed_messages(state, msg)
+
+            # Logging.debug("checking for inernal_callback ->~p", [msg.internal_callback])
+
+            if msg.internal_callback != nil do
+              callback(state, msg.internal_callback)
+            end
+
+            {:noreply, state}
+          end
+
+        Logging.debug("pname :~p log_event called", [process_name])
+
+        EventLogger.log_event(
+          ModelUtils.get_entity_type(msg),
+          ModelUtils.get_entity_id(msg),
+          "process",
+          %{}
+        )
+
+        rtn
+      end
+
       def handle_cast(_msg, state) do
         {:noreply, state}
       end
@@ -317,20 +401,25 @@ defmodule ProcessManager.UnitProcess.GeneralUnitProcess do
           [process_name, @check_last_arrived_message_time, last_arrived_message_time]
         )
 
-        if Utilities.now() - last_arrived_message_time >=
-             @wait_to_new_message_timeout_to_terminate do
-          Logging.debug(
-            "
+        res =
+          if Utilities.now() - last_arrived_message_time >=
+               @wait_to_new_message_timeout_to_terminate do
+            Logging.debug(
+              "
           pname: ~p ->
           Stop process:~p cause of no message after long time, So let stop it",
-            [
-              process_name,
-              self()
-            ]
-          )
+              [
+                process_name,
+                self()
+              ]
+            )
 
-          Process.exit(self(), :normal)
-        end
+            {:stop, "no message for long time", state}
+          else
+            {:noreply, state}
+
+            # Process.exit(self(), :normal)
+          end
 
         Process.send_after(
           self(),
@@ -338,7 +427,22 @@ defmodule ProcessManager.UnitProcess.GeneralUnitProcess do
           @wait_to_new_message_timeout_to_terminate + 100
         )
 
-        {:noreply, state}
+        res
+      end
+
+      def handle_info({:ingress, msg, from, ref}, state) do
+        Logging.debug("info ingress - msg:~p from:~p ref:~p", [
+          msg,
+          from,
+          ref
+        ])
+
+        # send arrived message as new message to postpone processing
+        GenServer.cast(self(), {:process_message, msg})
+
+        send(from, ref)
+        new_state = %{state | arrived_messages: state.arrived_messages + 1}
+        {:noreply, new_state}
       end
 
       @compile {:inline, watchdog: 0}
@@ -361,6 +465,21 @@ defmodule ProcessManager.UnitProcess.GeneralUnitProcess do
           @check_last_arrived_message_time,
           @wait_to_new_message_timeout_to_terminate + 100
         )
+      end
+
+      def terminate(
+            reason,
+            state
+          ) do
+        Logging.debug("Called. reason:~p, proccess name:~p", [reason, state.process_name])
+        pmodel = DatabaseEngine.Interface.Process.get(state.process_name)
+        Logging.debug("pmodel:~p", [pmodel])
+
+        if pmodel != nil and pmodel.local_pid == self() do
+          DatabaseEngine.Interface.Process.del(state.process_name)
+        end
+
+        state
       end
 
       # end qoute do

@@ -57,34 +57,143 @@ defmodule Dispatcher.Process do
     end
   end
 
+  def stop_local_gen_server(p) do
+    Logging.debug("called.")
+    GenServer.stop(p)
+  end
+
   def get_module_by_message(message) do
     ProcessManager.UnitProcess.Identifier.get_process_module(message)
-    # Dispatcher.Protocols.DispatcherInfo.get_unit_process_module_for_message(message)
   end
 
   def get_process_name_by_message(message) do
     ProcessManager.UnitProcess.Identifier.get_process_name(message)
-    # Dispatcher.Protocols.DispatcherInfo.get_process_name(message)
+  end
 
-    # case message do
-    #   %DatabaseEngine.Models.SMS{
-    #     sender: receiver
-    #   } ->
-    #     receiver
+  def start_bunch_of_process_locally(process_message_tuple_list) do
+    Logging.debug("called. node:~p - process_message count:~p", [
+      node(),
+      process_message_tuple_list |> length
+    ])
 
-    #   %DatabaseEngine.Models.RadiusPacket{
-    #     attribs: attrs
-    #   } ->
-    #     username_attr_id = 1
-    #     acct_session_id = 44
-    #     acct_multi_session_id = 50
+    process_message_tuple_list
+    |> Enum.map(fn {pn, msg} ->
+      module = get_module_by_message(msg)
+      args = %{"process_name" => pn}
 
-    #     r =
-    #       attrs[username_attr_id] || attrs[acct_session_id] ||
-    #         attrs[acct_multi_session_id]
+      case(start_local_gen_server(module, args, [])) do
+        p when is_pid(p) ->
+          process_model = %Dispatcher.Process.ProcessModel{
+            node_address: node(),
+            name: pn,
+            local_pid: p,
+            start_time: Utilities.now()
+          }
 
-    #     r
-    # end
+          store_result =
+            :mnesia.transaction(
+              fn ->
+                already_def = DatabaseEngine.Interface.Process.get_for_update(pn)
+
+                if already_def != nil do
+                  :mnesia.abort("already defined")
+                else
+                  DatabaseEngine.Interface.Process.set(pn, process_model)
+                end
+              end,
+              [],
+              1
+            )
+
+          case store_result do
+            {:aborted, err} ->
+              Logging.debug("failed to create process:~p", [err])
+              stop_local_gen_server(p)
+
+            _ ->
+              p
+          end
+
+        _ ->
+          false
+      end
+    end)
+  end
+
+  def generate_processes(process_message_tuple_list) do
+    Logging.debug("Called. process_message count:~p", [length(process_message_tuple_list)])
+    nodes = Utilities.all_active_nodes() |> Enum.shuffle()
+
+    node_count = length(nodes)
+    process_count_per_node = Kernel.ceil(length(process_message_tuple_list) / node_count)
+
+    start_indices =
+      :lists.seq(0, node_count - 1)
+      |> Enum.map(fn x ->
+        x * process_count_per_node
+      end)
+
+    slices =
+      start_indices
+      |> Enum.map(fn s ->
+        Enum.slice(process_message_tuple_list, s, process_count_per_node)
+      end)
+
+    node_slice = Enum.zip(nodes, slices)
+
+    Logging.debug("node_slice:~p", [
+      node_slice
+      |> Enum.map(fn {n, lst} ->
+        {n, lst |> Enum.map(fn {pn, _} -> pn end)}
+      end)
+    ])
+
+    pids =
+      node_slice
+      |> Enum.map(fn {nodename, process_msg_tuple_list} ->
+        Logging.debug("nodename:~p", [nodename])
+
+        spawn(fn ->
+          Logging.debug("spawned for node name:~p", [nodename])
+
+          case :rpc.block_call(
+                 nodename,
+                 Dispatcher.Process,
+                 :start_bunch_of_process_locally,
+                 [process_msg_tuple_list],
+                 @process_creation_timeout
+               ) do
+            {:badrpc, reason} ->
+              Logging.debug("BadRPC:~p", [reason])
+              false
+
+            other ->
+              Logging.debug("Rpc Returned:~p", [other])
+              true
+          end
+        end)
+      end)
+
+    waiter(pids)
+  end
+
+  def waiter(pids) do
+    # Logging.debug("Called. pid length:~p", [pids |> length])
+
+    should_wait =
+      pids
+      |> Enum.map(&Process.alive?/1)
+      |> Enum.reduce(false, fn r, acc ->
+        acc or r
+      end)
+
+    case should_wait do
+      true ->
+        waiter(pids)
+
+      false ->
+        :ok
+    end
   end
 
   def send_messages(messages) do
@@ -117,15 +226,34 @@ defmodule Dispatcher.Process do
         end
       end)
 
-    results =
+    not_exist_processes_process_messgae_tuple =
       process_message_tuples
-      |> Enum.map(&send_message/1)
+      |> Enum.filter(fn {pn, _} ->
+        DatabaseEngine.Interface.Process.get(pn) == nil
+      end)
 
-    wait_to_response_or_timeout(
-      Utilities.now(),
-      results,
-      process_message_tuples
-    )
+    st = Utilities.now()
+    generate_processes(not_exist_processes_process_messgae_tuple)
+    process_creation_time = Utilities.now() - st
+
+    st = Utilities.now()
+    not_delivered_process_message_tuple_list = dispatch_messages_to_nodes(process_message_tuples)
+    send_message_to_process_time = Utilities.now() - st
+
+    need_to_requeue =
+      not_delivered_process_message_tuple_list
+      |> Enum.map(fn {pn, msg} ->
+        DatabaseEngine.Interface.Process.del(pn)
+        msg
+      end)
+
+    %{
+      "stats" => %{
+        "send_message_to_process_time" => send_message_to_process_time,
+        "process_creation_time" => process_creation_time
+      },
+      "need_to_requeue" => need_to_requeue
+    }
   end
 
   def ok_nok_to_boolean(v) do
@@ -327,10 +455,6 @@ defmodule Dispatcher.Process do
         #          case Mnesia.read({@table_name, process_name}) do
         result =
           case DatabaseEngine.Interface.Process.get(process_name) do
-            {:aborted, reason} ->
-              Logging.error("could not get_process_model cause of :~p", [reason])
-              false
-
             v when v in [[], nil] ->
               process_creation_result = create_process(process_name, message)
               Logging.debug("Process creation result:~p", [process_creation_result])
@@ -386,6 +510,183 @@ defmodule Dispatcher.Process do
 
         r
     end
+  end
+
+  def wait_for_refs(till_time, refs) when is_map(refs) do
+    # some times directely read from inbox is better than using receive
+    # Logging.debug("node:~p refs:~p", [node, refs |> Map.keys()])
+
+    if Utilities.now() < till_time do
+      new_ref =
+        receive do
+          in_msg ->
+            case in_msg do
+              r when is_reference(r) ->
+                Logging.debug("node:~p - a ref arrived from a process. ref:~p", [
+                  node(),
+                  r
+                ])
+
+                refs |> Map.delete(r)
+
+              _ ->
+                refs
+            end
+        after
+          1 ->
+            refs
+        end
+
+      if new_ref |> Map.keys() |> length == 0 do
+        %{}
+      else
+        wait_for_refs(till_time, new_ref)
+      end
+    else
+      refs
+    end
+  end
+
+  def send_bunch_of_messages_locally(process_message_tuple_list) do
+    # 1. create refrence per each message
+    # 2. send message to procrss name and knowing which message is seent and which one has no process
+    # 3. wait to get ack from user process for 1second
+
+    Logging.debug("called on node:~p", [node()])
+    refs = process_message_tuple_list |> Enum.map(fn _ -> make_ref() end)
+    map_ref_pnm = Enum.zip(refs, process_message_tuple_list) |> Map.new()
+    Logging.debug("running tasks")
+
+    task =
+      Task.async(fn ->
+        send_result_refs =
+          process_message_tuple_list
+          |> Enum.with_index()
+          |> Enum.map(fn {{pn, msg}, indx} ->
+            pmodel = DatabaseEngine.Interface.Process.get(pn)
+
+            ref = refs |> Enum.at(indx)
+
+            if pmodel == nil do
+              {nil, ref}
+            else
+              send(pmodel.local_pid, {:ingress, msg, self(), ref})
+              {:ok, ref}
+            end
+          end)
+
+        Logging.debug("node:~p all messages sent", [node()])
+
+        no_have_process_refs =
+          send_result_refs
+          |> Enum.filter(fn {a, _} ->
+            a == nil
+          end)
+          |> Enum.map(fn {_, b} -> b end)
+
+        failed_to_send_map =
+          no_have_process_refs
+          |> Enum.reduce(%{}, fn r, acc ->
+            acc |> Map.put(r, map_ref_pnm[r])
+          end)
+
+        Logging.debug("no_have_process_refs:~p", [no_have_process_refs])
+        success_sent_map = map_ref_pnm |> Map.drop(no_have_process_refs)
+
+        faild_to_get_response = wait_for_refs(Utilities.now() + 1_000, success_sent_map)
+
+        Logging.debug("node:~p - faild_to_get_response:~p", [
+          node(),
+          faild_to_get_response |> Map.keys()
+        ])
+
+        ref_result = Map.merge(faild_to_get_response, failed_to_send_map)
+        # will returns process name whick did not send ack back.
+        rtn = ref_result |> Map.to_list() |> Enum.map(fn {_, pm} -> pm end)
+
+        Logging.debug("node:~p - process-messages which not delivered:~p", [
+          node(),
+          rtn |> Enum.map(fn {p, _} -> p end)
+        ])
+
+        rtn
+      end)
+
+    Task.await(task)
+  end
+
+  def dispatch_messages_to_nodes(process_message_tuple_list) do
+    Logging.debug("Called.")
+
+    node_per_pm =
+      process_message_tuple_list
+      |> Enum.map(fn {pn, _} ->
+        pm = DatabaseEngine.Interface.Process.get(pn)
+
+        if pm != nil do
+          pm.node_address
+        else
+          nil
+        end
+      end)
+
+    n_p_m = Enum.zip(node_per_pm, process_message_tuple_list)
+    grouped_pm_by_node_map = n_p_m |> Enum.group_by(fn {n, _} -> n end, fn {_, pm} -> pm end)
+
+    {no_process_found_in_processes, grouped_pm_by_node_map} =
+      grouped_pm_by_node_map |> Map.pop(nil)
+
+    no_process_found_in_processes = no_process_found_in_processes || []
+
+    tasks =
+      grouped_pm_by_node_map
+      |> Map.to_list()
+      |> Enum.map(fn {nodename, pms} ->
+        Logging.debug("spawining - called for nodename:~p", [nodename])
+
+        Task.async(fn ->
+          Logging.debug("calling node:~p to send locally messages", [nodename])
+
+          case :rpc.block_call(
+                 nodename,
+                 Dispatcher.Process,
+                 :send_bunch_of_messages_locally,
+                 [pms],
+                 3_000
+               ) do
+            {:badrpc, reason} ->
+              Logging.debug("badrpc:~p", [reason])
+              pms
+
+            r when is_list(r) ->
+              Logging.debug("failed to deliver pm_tuple_list:~p", [
+                r |> Enum.map(fn {p, _} -> p end)
+              ])
+
+              r
+
+            other ->
+              Logging.debug("we were waiting to list of processname and msgs not other:~p", [
+                other
+              ])
+
+              pms
+          end
+        end)
+      end)
+
+    failed_to_delivered_process_message_tuple_list =
+      tasks
+      |> Enum.map(fn t ->
+        Task.await(t)
+      end)
+
+    rtn =
+      [no_process_found_in_processes, failed_to_delivered_process_message_tuple_list]
+      |> List.flatten()
+
+    # Logging.debug("return :~p", [rtn])
+    rtn
   end
 
   def get_process_model(_process_name) do
