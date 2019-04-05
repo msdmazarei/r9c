@@ -34,6 +34,13 @@ defmodule Dispatcher.Consumers.InQConsumer do
   end
 
   # note - messages are delivered in batches
+
+  def handle_info({:EXIT, _, :normal}, state) do
+    #sometimes cause of Task.async we receive this messages from child processes
+    # we need this to avoid log error in log file cause of nothing
+    {:noreply, state}
+  end
+
   def handle_message_set(message_set, state) do
     st = Utilities.now()
 
