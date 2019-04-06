@@ -6,7 +6,6 @@ defmodule Utilities do
   require Utilities.Logging
   alias Utilities.Logging
 
-
   @doc """
   Hello world.
 
@@ -323,5 +322,33 @@ defmodule Utilities do
 
   def iter_over_all_iterables(iterable, func, first_apply_func) when is_map(iterable) do
     iterable |> Map.to_list() |> iter_over_all_iterables(func, first_apply_func) |> Map.new()
+  end
+
+  @spec agg_binaries_till_reach_to_size([any()], any() , integer()) :: [[any()]]
+  def agg_binaries_till_reach_to_size(bin_list, size_func, target_size) do
+    init = [{0, []}]
+
+    bin_list
+    |> Enum.reduce(init, fn b, res_bin_list ->
+      bsize = size_func.(b)
+
+      first_proper_item_index =
+        res_bin_list
+        |> Enum.find_index(fn {s, _} ->
+          s + bsize <= target_size
+        end)
+
+      case first_proper_item_index do
+        nil ->
+          new_item = {size_func.(b), [b]}
+          [new_item | res_bin_list]
+
+        i ->
+          {s, bl} = res_bin_list |> Enum.at(i)
+          new_item = {s + bsize, [b | bl]}
+          res_bin_list |> List.replace_at(i, new_item)
+      end
+    end)
+    |> Enum.map(fn {_, l} -> l end)
   end
 end

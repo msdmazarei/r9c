@@ -7,6 +7,8 @@ defmodule DatabaseEngine.DurableQueue do
   alias Utilities.Serializers.BinSerializer, as: Serializer
   alias Utilities.Logging
 
+  @kafka_max_message_size_to_produce 1024 * 1024 - 100
+
   @spec serialize(any()) :: String.t() | :nok
   def serialize(obj) do
     Logging.debug("Called.", [])
@@ -150,6 +152,85 @@ defmodule DatabaseEngine.DurableQueue do
     end
   end
 
+  def enqueue_list(topic_name, list_of_objects) do
+    partitions =
+      get_partitions_of_topic(topic_name)
+      |> Enum.map(fn x -> x.partition_id end)
+      |> Enum.shuffle()
+
+
+    case partitions do
+      l when is_list(l) and length(l) > 0 ->
+        len_parts = length(l)
+
+        partition_for_items =
+          list_of_objects
+          |> Enum.with_index()
+          |> Enum.map(fn {_, i} ->
+            rem(i, len_parts)
+          end)
+
+        list_of_objects_with_index = list_of_objects |> Enum.with_index()
+
+        part_obj = Enum.zip(partition_for_items, list_of_objects_with_index)
+        map_part_obj = part_obj |> Enum.group_by(fn {p, _} -> p end, fn {_, o} -> o end)
+
+        tasks =
+          map_part_obj
+          |> Map.to_list()
+          |> Enum.map(fn {p, objs_list_with_index} ->
+            Task.async(fn ->
+              serialized_obj_list_with_index =
+                objs_list_with_index |> Enum.map(fn {obj, indx} -> {serialize(obj), indx} end)
+
+              list_of_list_of_bins_with_index =
+                Utilities.agg_binaries_till_reach_to_size(
+                  serialized_obj_list_with_index,
+                  fn {b, _} -> byte_size(b) end,
+                  @kafka_max_message_size_to_produce
+                )
+
+              result_of_sending_msg =
+                list_of_list_of_bins_with_index
+                |> Enum.map(fn list_of_bin_with_index ->
+                  list_of_kafka_msgs =
+                    list_of_bin_with_index
+                    |> Enum.map(fn {x_bin, _} ->
+                      %KafkaEx.Protocol.Produce.Message{value: x_bin}
+                    end)
+
+                  r =
+                    KafkaEx.produce(%KafkaEx.Protocol.Produce.Request{
+                      topic: topic_name,
+                      partition: p,
+                      required_acks: 1,
+                      messages: list_of_kafka_msgs
+                    })
+
+                  case r do
+                    :ok ->
+                      list_of_bin_with_index |> Enum.map(fn {_, i} -> {i, :ok} end)
+
+                    {:ok, _} ->
+                      list_of_bin_with_index |> Enum.map(fn {_, i} -> {i, :ok} end)
+
+                    other ->
+                      Logging.error("unexpected result for enqueue:~p", [other])
+                      list_of_bin_with_index |> Enum.map(fn {_, i} -> {i, :nok} end)
+                  end
+                end)
+
+              result_of_sending_msg |> List.flatten()
+            end)
+          end)
+
+        tasks |> Enum.map(fn t -> Task.await(t) end) |> List.flatten()
+
+      _ ->
+        list_of_objects |> Enum.with_index() |> Enum.map(fn _, i -> {i, :nok} end)
+    end
+  end
+
   @spec start_consumer_group(String.t(), String.t(), module()) ::
           {:ok, pid()}
           | {:ok, pid(), info :: term()}
@@ -174,7 +255,18 @@ defmodule DatabaseEngine.DurableQueue do
       :id => topic_name,
       :start =>
         {KafkaEx.ConsumerGroup, :start_link,
-         [consumer_module, consumer_group_name, [topic_name], []]},
+         [
+           consumer_module,
+           consumer_group_name,
+           [topic_name],
+           [
+             # setting for the ConsumerGroup
+             heartbeat_interval: 5_000,
+             # this setting will be forwarded to the GenConsumer
+             commit_interval: 5_000,
+             commit_threshold: 5_000
+           ]
+         ]},
       :restart => :permanent,
       :type => :worker
     }
@@ -196,6 +288,10 @@ defmodule DatabaseEngine.DurableQueue do
       DatabaseEngine.DurableQueue.ConsumerGroupWorkers.Supervisor,
       pid
     )
+  end
+
+  def stop_consumer_group() do
+    DynamicSupervisor.stop(DatabaseEngine.DurableQueue.ConsumerGroupWorkers.Supervisor)
   end
 
   def get_consumers_pid() do
@@ -279,7 +375,6 @@ defmodule DatabaseEngine.DurableQueue do
         parts_stat
         |> Map.to_list()
         |> Enum.reduce(%{}, fn {_, m}, res ->
-
           r =
             m
             |> Map.to_list()
