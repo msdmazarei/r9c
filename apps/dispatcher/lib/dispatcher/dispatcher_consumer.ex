@@ -91,11 +91,14 @@ defmodule Dispatcher.Consumers.InQConsumer do
     {:async_commit, new_state}
   end
 
-  def handle_message_set(message_set, state) do
+  def handle_message_set__(message_set, state) do
     speed_meter(message_set, state)
   end
 
-  def handle_message_set__(message_set, state) do
+  def handle_message_set(
+        message_set,
+        state = %{"last_arrived_message_batch_size" => last_arrived_message_batch_size}
+      ) do
     st = Utilities.now()
 
     Logging.debug("Called. message_set legth:~p", [message_set |> length])
@@ -167,6 +170,15 @@ defmodule Dispatcher.Consumers.InQConsumer do
 
     du = Utilities.now() - st + (state[@process_duration] || 0)
 
+    last_arrived_message_batch_size =
+      case last_arrived_message_batch_size do
+        l when length(l) > 100 ->
+          [length(message_set) | Enum.slice(l, 0, 80)]
+
+        l ->
+          [length(message_set) | l]
+      end
+
     new_state =
       state
       |> Map.put(@processed_messages, processed_messages)
@@ -184,6 +196,7 @@ defmodule Dispatcher.Consumers.InQConsumer do
         (state[@dropped_messages_cause_of_retry] || 0) + dropped_messages_cause_of_retry
       )
       |> Map.put(@process_duration, du)
+      |> Map.put(@last_arrived_message_batch_size, last_arrived_message_batch_size)
 
     {:async_commit, new_state}
   end
