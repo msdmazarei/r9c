@@ -53,8 +53,8 @@ defmodule OnlineChargingSystem.Servers.Diameter.ConnectedClientProcess.ConvertBy
           # processing and storing phases
           # we avoid to lock buffer when we are searching dia_packets
           # meanwhile some new bytes may arrived
-          current_in_buf = LKV.get_for_update(mnesia_buffer_key)
-          already_packets = LKV.get_for_update(mnesia_packets_key)
+          current_in_buf = LKV.get_for_update(mnesia_buffer_key) || []
+          already_packets = LKV.get_for_update(mnesia_packets_key) || []
 
           in_buf_len = byte_size(in_buf)
           <<_::binary-size(in_buf_len), new_arrived_bytes::binary>> = current_in_buf

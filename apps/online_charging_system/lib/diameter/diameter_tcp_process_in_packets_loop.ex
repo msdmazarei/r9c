@@ -12,6 +12,7 @@ defmodule OnlineChargingSystem.Servers.Diameter.ConnectedClientProcess.ProcessIn
   @client_port "client_port"
   @pname "pname"
   @output_buffer_count "output_buffer_count"
+  @per_q_success_failuar_map "per_q_success_failuar_map"
 
   require Logger
   require Utilities.Logging
@@ -66,75 +67,109 @@ defmodule OnlineChargingSystem.Servers.Diameter.ConnectedClientProcess.ProcessIn
       ) do
     input_packets = LKV.get(mnesia_packets_key) || []
 
-    enqueue_result =
-      input_packets
-      |> Enum.map(fn x ->
-        qn = get_queue_name_for_dia_packet(client_config, x, client_address)
+    if length(input_packets) > 0 do
+      dia_structs_to_enqueue =
+        input_packets
+        |> Enum.map(fn x ->
+          qn = get_queue_name_for_dia_packet(client_config, x, client_address)
 
-        if qn != nil do
-          Logging.debug("enqueue packet to q:~p", [qn])
+          if qn != nil do
+            Logging.debug("enqueue packet to q:~p", [qn])
 
-          diameter_struct = %DatabaseEngine.Models.DiameterPacket{
-            id: UUID.uuid1(),
-            client_address: client_ip,
-            client_port: client_port,
-            capture_timestamp: Utilities.now(),
-            packet_bin: x,
-            parsed_packet: Utilities.Parsers.Diameter.parse_from_bin(x),
-            options: %{},
-            internal_callback: %DatabaseEngine.Models.InternalCallback{
-              module_name: OnlineChargingSystem.Servers.Diameter.ConnectedClientProcess,
-              function_name: :send_response_back_to_client,
-              arguments: [{node(), pname, output_buffer_count}]
+            diameter_struct = %DatabaseEngine.Models.DiameterPacket{
+              id: UUID.uuid1(),
+              client_address: client_ip,
+              client_port: client_port,
+              capture_timestamp: Utilities.now(),
+              packet_bin: x,
+              parsed_packet: Utilities.Parsers.Diameter.parse_from_bin(x),
+              options: %{},
+              internal_callback: %DatabaseEngine.Models.InternalCallback{
+                module_name: OnlineChargingSystem.Servers.Diameter.ConnectedClientProcess,
+                function_name: :send_response_back_to_client,
+                arguments: [{node(), pname, output_buffer_count}]
+              }
             }
-          }
 
-          DatabaseEngine.DurableQueue.enqueue(
-            qn,
-            diameter_struct
-          )
-        else
-          # packet will be dropped
-          nil
-        end
-      end)
-
-    en_in = Enum.zip(enqueue_result, input_packets)
-
-    re_enq =
-      en_in
-      |> Enum.filter(fn {res, _} ->
-        res == :nok
-      end)
-      |> Enum.map(fn {_, v} -> v end)
-
-    succ_enq_count = en_in |> Enum.filter(fn {res, _} -> res == :ok end) |> length
-    dropped_count = en_in |> Enum.filter(fn {res, _} -> res == nil end) |> length
-
-    r =
-      :mnesia.transaction(fn ->
-        current_input_packets = LKV.get_for_update(mnesia_packets_key) || []
-        clen = current_input_packets |> length
-        olen = en_in |> length
-
-        new_input_packets =
-          if clen > olen do
-            new_elems = current_input_packets |> Enum.slice(olen, clen - olen)
-            # make new elements first of list
-            new_elems ++ re_enq
+            {qn, diameter_struct}
           else
-            re_enq
+            # packet will be dropped
+            nil
           end
+        end)
 
-        LKV.set(mnesia_packets_key, new_input_packets)
-      end)
+      to_enq = dia_structs_to_enqueue |> Enum.filter(fn x -> x != nil end)
 
-    case r do
-      {:aborted, reason} ->
-        {:terminate, reason}
+      grouped_by_qname = to_enq |> Enum.group_by(fn {q, _} -> q end, fn {_, v} -> v end)
 
-      {:atomic, _} ->
-        {succ_enq_count, dropped_count, length(re_enq)}
+      # we use async task because may we need multiple qname with arrived packets
+
+      tasks =
+        grouped_by_qname
+        |> Map.to_list()
+        |> Enum.map(fn {qname, packets} ->
+          Task.async(fn ->
+            Logging.debug("spawned for qname:~p to enque list len:~p", [qname, length(packets)])
+            {qname, DatabaseEngine.DurableQueue.enqueue_list(qname, packets)}
+          end)
+        end)
+
+      Logging.debug("awaiting")
+      enqueue_task_result_group_by_qname = tasks |> Enum.map(fn x -> Task.await(x) end)
+
+      Logging.debug("All response from enqueuing arrived.")
+
+      per_q_success_failuar_map =
+        enqueue_task_result_group_by_qname
+        |> Enum.map(fn {qname, resu} ->
+          count = resu |> Enum.map(fn {_, res} -> res == :ok end) |> length
+          {qname, %{"ok" => count, "nok" => length(resu) - count}}
+        end)
+        |> Map.new()
+
+      Logging.debug("success_failuar per q:~p", [per_q_success_failuar_map])
+
+      dropped_cause_of_no_qname = length(dia_structs_to_enqueue) - length(to_enq)
+
+      succ_enq_count =
+        per_q_success_failuar_map
+        |> Map.to_list()
+        |> Enum.map(fn {_, %{"ok" => success}} -> success end)
+        |> Enum.sum()
+
+      dropped_count = dropped_cause_of_no_qname + length(to_enq) - succ_enq_count
+
+      # carefully think about re_enq
+      re_enq = []
+
+      r =
+        :mnesia.transaction(fn ->
+          current_input_packets = LKV.get_for_update(mnesia_packets_key) || []
+          clen = current_input_packets |> length
+          olen = input_packets |> length
+          Logging.debug("clen:~p olen:~p",[clen, olen])
+
+          new_input_packets =
+            if clen > olen do
+              new_elems = current_input_packets |> Enum.slice(olen, clen - olen)
+              # make new elements first of list
+              new_elems ++ re_enq
+            else
+              re_enq
+            end
+
+          LKV.set(mnesia_packets_key, new_input_packets)
+        end)
+
+      case r do
+        {:aborted, reason} ->
+          {:terminate, reason}
+
+        {:atomic, _} ->
+          {succ_enq_count, dropped_count, length(re_enq), per_q_success_failuar_map}
+      end
+    else
+      {0, 0, 0, %{}}
     end
   end
 
@@ -149,7 +184,8 @@ defmodule OnlineChargingSystem.Servers.Diameter.ConnectedClientProcess.ProcessIn
           @output_buffer_count => output_buffer_count,
           @processed_packets => processed_packets,
           @droped_packets => droped_packets,
-          @requeued_packets => requeued_packets
+          @requeued_packets => requeued_packets,
+          @per_q_success_failuar_map => per_q_success_failuar_map
         }
       ) do
     {continue, state} =
@@ -163,7 +199,8 @@ defmodule OnlineChargingSystem.Servers.Diameter.ConnectedClientProcess.ProcessIn
                  %{
                    @processed_packets => processed_packets,
                    @droped_packets => droped_packets,
-                   @requeued_packets => requeued_packets
+                   @requeued_packets => requeued_packets,
+                   @per_q_success_failuar_map => per_q_success_failuar_map
                  }}
               )
 
@@ -187,12 +224,37 @@ defmodule OnlineChargingSystem.Servers.Diameter.ConnectedClientProcess.ProcessIn
               state = state |> Map.put(@terminate_reason, reason)
               {false, state}
 
-            {pp, dp, rp} when is_number(pp) ->
+            {pp, dp, rp, per_q_success_failuar_map} when is_number(pp) ->
               state =
                 if pp == 0 and dp == 0 and rp == 0 do
                   :timer.sleep(20)
                   state
                 else
+                  state =
+                    case state[@per_q_success_failuar_map] do
+                      nil ->
+                        state |> Map.put(@per_q_success_failuar_map, per_q_success_failuar_map)
+
+                      v when is_map(v) ->
+                        new_v =
+                          per_q_success_failuar_map
+                          |> Map.to_list()
+                          |> Enum.reduce(v, fn {q, %{"ok" => succ, "nok" => fail}}, acc ->
+                            new_val =
+                              case acc[q] do
+                                nil ->
+                                  %{"ok" => succ, "nok" => fail}
+
+                                %{"ok" => osucc, "nok" => ofail} ->
+                                  %{"ok" => succ + osucc, "nok" => fail + ofail}
+                              end
+
+                            acc |> Map.put(q, new_val)
+                          end)
+
+                        state |> Map.put(@per_q_success_failuar_map, new_v)
+                    end
+
                   state
                   |> Map.put(@processed_packets, (processed_packets || 0) + pp)
                   |> Map.put(@droped_packets, (droped_packets || 0) + dp)

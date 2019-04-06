@@ -324,7 +324,7 @@ defmodule Utilities do
     iterable |> Map.to_list() |> iter_over_all_iterables(func, first_apply_func) |> Map.new()
   end
 
-  @spec agg_binaries_till_reach_to_size([any()], any() , integer()) :: [[any()]]
+  @spec agg_binaries_till_reach_to_size([any()], any(), integer()) :: [[any()]]
   def agg_binaries_till_reach_to_size(bin_list, size_func, target_size) do
     init = [{0, []}]
 
@@ -335,7 +335,7 @@ defmodule Utilities do
       first_proper_item_index =
         res_bin_list
         |> Enum.find_index(fn {s, _} ->
-          s + bsize <= target_size
+          target_size > s + bsize
         end)
 
       case first_proper_item_index do

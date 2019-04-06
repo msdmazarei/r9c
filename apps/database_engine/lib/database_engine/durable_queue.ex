@@ -158,7 +158,6 @@ defmodule DatabaseEngine.DurableQueue do
       |> Enum.map(fn x -> x.partition_id end)
       |> Enum.shuffle()
 
-
     case partitions do
       l when is_list(l) and length(l) > 0 ->
         len_parts = length(l)
@@ -264,7 +263,11 @@ defmodule DatabaseEngine.DurableQueue do
              heartbeat_interval: 5_000,
              # this setting will be forwarded to the GenConsumer
              commit_interval: 5_000,
-             commit_threshold: 5_000
+             commit_threshold: 5_000,
+             fetch_options: [
+              max_bytes: 3_000_000
+
+             ]
            ]
          ]},
       :restart => :permanent,
@@ -388,6 +391,26 @@ defmodule DatabaseEngine.DurableQueue do
       parts_stat =
         parts_stat
         |> Map.put("total", total_res)
+
+      {qname, parts_stat}
+    end)
+  end
+
+  def get_consumers_states() do
+    consumers = get_consumers_pid()
+
+    consumers
+    |> Enum.map(fn {qname, parts_map} ->
+      parts_stat =
+        parts_map
+        |> Map.to_list()
+        |> Enum.map(fn {part_no, part_pid} ->
+          state =
+            case :sys.get_state(part_pid) do
+              %KafkaEx.GenConsumer.State{consumer_state: m} ->
+                m
+            end
+        end)
 
       {qname, parts_stat}
     end)

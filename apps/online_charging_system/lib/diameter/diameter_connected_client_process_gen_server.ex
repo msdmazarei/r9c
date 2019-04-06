@@ -109,7 +109,8 @@ defmodule OnlineChargingSystem.Servers.Diameter.ConnectedClientProcess do
             "client_ip" => client_ip_address_string,
             "client_port" => client_port,
             "pname" => pname,
-            "output_buffer_count" => output_buffer_count
+            "output_buffer_count" => output_buffer_count,
+            "per_q_success_failuar_map"=>%{}
           }
         ]
       )

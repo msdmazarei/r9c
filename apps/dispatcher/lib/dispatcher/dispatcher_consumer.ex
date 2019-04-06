@@ -18,6 +18,7 @@ defmodule Dispatcher.Consumers.InQConsumer do
   @need_to_requeue_count "need_to_requeue_count"
   @dropped_messages_cause_of_retry "dropped_messages_cause_of_retry"
   @successfully_delivered_to_uprocess "successfully_delivered_to_uprocess"
+  @last_arrived_message_batch_size "last_arrived_message_batch_size"
 
   @requeue_retry_count 5
 
@@ -29,7 +30,8 @@ defmodule Dispatcher.Consumers.InQConsumer do
        "topic" => topic,
        "partition" => partition,
        @arrived_messages => 0,
-       @processed_messages => 0
+       @processed_messages => 0,
+       @last_arrived_message_batch_size => []
      }}
   end
 
@@ -41,7 +43,59 @@ defmodule Dispatcher.Consumers.InQConsumer do
     {:noreply, state}
   end
 
+  def speed_meter(
+        message_set,
+        state = %{"last_arrived_message_batch_size" => last_arrived_message_batch_size}
+      ) do
+    st = Utilities.now()
+
+    Logging.debug("Called. message_set legth:~p", [message_set |> length])
+
+    processed_messages = (state[@processed_messages] || 0) + length(message_set)
+    arrived_messages = (state[@arrived_messages] || 0) + length(message_set)
+    process_creation_time = (state[@process_creation_time] || 0) + 0
+
+    send_message_to_process_time = (state[@send_message_to_process_time] || 0) + 0
+
+    need_to_requeue_count = 0
+
+    dropped_messages_cause_of_retry = 0
+
+    last_arrived_message_batch_size =
+      case last_arrived_message_batch_size do
+        l when length(l) > 100 ->
+          [length(message_set) | Enum.slice(l, 0, 80)]
+
+        l ->
+          [length(message_set) | l]
+      end
+
+    new_state =
+      state
+      |> Map.put(@processed_messages, processed_messages)
+      |> Map.put(@arrived_messages, arrived_messages)
+      |> Map.put(@process_creation_time, process_creation_time)
+      |> Map.put(@send_message_to_process_time, send_message_to_process_time)
+      |> Map.put(@need_to_requeue_count, need_to_requeue_count)
+      |> Map.put(
+        @successfully_delivered_to_uprocess,
+        processed_messages
+      )
+      |> Map.put(
+        @dropped_messages_cause_of_retry,
+        0
+      )
+      |> Map.put(@process_duration, 0)
+      |> Map.put(@last_arrived_message_batch_size, last_arrived_message_batch_size)
+
+    {:async_commit, new_state}
+  end
+
   def handle_message_set(message_set, state) do
+    speed_meter(message_set, state)
+  end
+
+  def handle_message_set__(message_set, state) do
     st = Utilities.now()
 
     Logging.debug("Called. message_set legth:~p", [message_set |> length])
