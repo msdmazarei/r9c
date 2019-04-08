@@ -153,43 +153,70 @@ defmodule Dispatcher.Process do
       |> Enum.map(fn {nodename, process_msg_tuple_list} ->
         Logging.debug("nodename:~p", [nodename])
 
-        spawn(fn ->
+        :erlang.spawn(nodename, fn ->
           Logging.debug("spawned for node name:~p", [nodename])
-
-          case :rpc.block_call(
-                 nodename,
-                 Dispatcher.Process,
-                 :start_bunch_of_process_locally,
-                 [process_msg_tuple_list],
-                 @process_creation_timeout
-               ) do
-            {:badrpc, reason} ->
-              Logging.debug("BadRPC:~p", [reason])
-              false
-
-            other ->
-              Logging.debug("Rpc Returned:~p", [other])
-              true
-          end
+          init_pid = :erlang.whereis(:init)
+          :erlang.group_leader(init_pid, self())
+          Dispatcher.Process.start_bunch_of_process_locally(process_msg_tuple_list)
         end)
+
+        # spawn(fn ->
+        #   Logging.debug("spawned for node name:~p", [nodename])
+
+        #   case :rpc.block_call(
+        #          nodename,
+        #          Dispatcher.Process,
+        #          :start_bunch_of_process_locally,
+        #          [process_msg_tuple_list],
+        #          @process_creation_timeout
+        #        ) do
+        #     {:badrpc, reason} ->
+        #       Logging.debug("BadRPC:~p", [reason])
+        #       false
+
+        #     other ->
+        #       Logging.debug("Rpc Returned:~p", [other])
+        #       true
+        #   end
+        # end)
       end)
 
-    waiter(pids)
+    waiter(pids, Utilities.now() + @process_creation_timeout)
   end
 
-  def waiter(pids) do
+  def waiter(pids, wait_till_time \\ :infinity) do
     # Logging.debug("Called. pid length:~p", [pids |> length])
 
     should_wait =
       pids
-      |> Enum.map(&Process.alive?/1)
+      |> Enum.map(fn pid ->
+        case :rpc.block_call(pid |> node(), :erlang, :is_process_alive, [pid], 1_000) do
+          {:badrpc, reason} ->
+            Logging.debug("badrpc to get live status of pocess:~p reason:~p", [pid, reason])
+            false
+
+          v ->
+            v
+        end
+      end)
       |> Enum.reduce(false, fn r, acc ->
         acc or r
       end)
 
     case should_wait do
       true ->
-        waiter(pids)
+        expired =
+          if wait_till_time == :infinity do
+            false
+          else
+            Utilities.now() > wait_till_time
+          end
+
+        if expired do
+          :ok
+        else
+          waiter(pids)
+        end
 
       false ->
         :ok
