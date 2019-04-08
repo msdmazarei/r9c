@@ -4,6 +4,16 @@ defmodule DatabaseEngine.Interface.LKV do
   require Utilities.Logging
   alias Utilities.Logging
 
+  def all() do
+    case :mnesia.is_transaction() do
+      true ->
+        :mnesia.all_keys(LKVTb)
+
+      false ->
+        :mnesia.dirty_all_keys(LKVTb)
+    end
+  end
+
   def transaction(func) do
     case :mnesia.is_transaction() do
       true ->

@@ -110,7 +110,7 @@ defmodule OnlineChargingSystem.Servers.Diameter.ConnectedClientProcess do
             "client_port" => client_port,
             "pname" => pname,
             "output_buffer_count" => output_buffer_count,
-            "per_q_success_failuar_map"=>%{}
+            "per_q_success_failuar_map" => %{}
           }
         ]
       )
@@ -687,6 +687,135 @@ defmodule OnlineChargingSystem.Servers.Diameter.ConnectedClientProcess do
     :gen_tcp.close(client)
   end
 
+  def transfer_local_buffers_to_main_node_buffers(
+        main_node,
+        process_name,
+        output_buffer_count,
+        transferer_state
+      ) do
+    :timer.sleep(100)
+
+    outbuffers =
+      :lists.seq(0, output_buffer_count - 1)
+      |> Enum.map(fn bn ->
+        fetch_and_empty_output_buffer(
+          %{@process_name => process_name, @output_buffer_count => output_buffer_count},
+          bn
+        )
+      end)
+
+    {packet_bytes, packet_count} =
+      outbuffers
+      |> Enum.reduce({<<>>, 0}, fn {b, c}, {tb, tc} ->
+        # Logging.debug("b:~p c:~p tb:~p tc:~p",[b,c,tb,tc])
+        {<<tb::binary, b::binary>>, tc + c}
+      end)
+
+    transferer_state =
+      if packet_count > 0 do
+        Logging.debug("transfering packet:~p byts:~p", [
+          packet_count,
+          byte_size(packet_bytes)
+        ])
+
+        r =
+          :rpc.call(
+            main_node,
+            __MODULE__,
+            :append_to_output_buffer,
+            [
+              %{@process_name => process_name, @output_buffer_count => output_buffer_count},
+              packet_bytes,
+              packet_count
+            ],
+            5000
+          )
+
+        case r do
+          {:badrpc, reason} ->
+            Logging.warn("problem to send back result to main target node:~p. cause of :~p", [
+              main_node,
+              reason
+            ])
+
+            transferer_state
+
+          _ ->
+            Logging.debug("successfully buffers sent back to main node:~p", [main_node])
+            transferer_state |> Map.put("last_sent_epoch", Utilities.now())
+        end
+      else
+        transferer_state
+      end
+
+    if Utilities.now() > (transferer_state["last_sent_epoch"] || 0) + 60_000 do
+      # that is 60 seconds without any data to send back to main node
+      Logging.debug(
+        "exiting from transferer process cause of no data exists to send for 1 minute"
+      )
+
+      result =
+        DatabaseEngine.Interface.LKV.transaction(fn ->
+          :lists.seq(0, output_buffer_count - 1)
+          |> Enum.map(fn x ->
+            del_out_buffer_if_its_empty(%{@process_name => process_name}, x)
+          end)
+        end)
+
+      case result do
+        {:aborted, _} ->
+          Logging.debug("find a new buffer has value. dont kill this process.")
+
+          transferer_state = transferer_state |> Map.put("last_sent_epoch", Utilities.now())
+
+          transfer_local_buffers_to_main_node_buffers(
+            main_node,
+            process_name,
+            output_buffer_count,
+            transferer_state
+          )
+
+        _ ->
+          Logging.debug("process is going to terminate")
+          :ok
+      end
+    else
+      transfer_local_buffers_to_main_node_buffers(
+        main_node,
+        process_name,
+        output_buffer_count,
+        transferer_state
+      )
+    end
+  end
+
+  def start_if_not_already_started_transfer_process(
+        main_node,
+        process_name,
+        output_buffer_count
+      ) do
+    Logging.debug("Called.")
+    transfer_process_name = "buffer_transferer_#{process_name}" |> String.to_atom()
+    transfer_pid = :erlang.whereis(transfer_process_name)
+    Logging.debug("transfer_process_name:~p", [transfer_process_name])
+
+    if is_pid(transfer_pid) do
+      transfer_pid
+    else
+      transfer_pid =
+        spawn(__MODULE__, :transfer_local_buffers_to_main_node_buffers, [
+          main_node,
+          process_name,
+          output_buffer_count,
+          %{}
+        ])
+
+      :erlang.register(transfer_process_name, transfer_pid)
+      Logging.debug("spawned pid:~p name:~p", [transfer_pid, transfer_process_name])
+      transfer_pid
+    end
+  end
+
   def send_response_back_to_client({n, pn, output_buffer_count}, script_state) do
     Logging.debug("Called. cun: ~p r-pid:~p scr:~p", [
       node(),
@@ -701,24 +830,46 @@ defmodule OnlineChargingSystem.Servers.Diameter.ConnectedClientProcess do
         # r=:rpc.call(pid|>node, GenServer, :call, [pid,{:send_diameter_packet, dia_packet}],5000)
         # Logging.info("result rpc call:~p")
         bytes = dia_packet |> Utilities.Parsers.Diameter.serialize_to_bin()
+        Logging.debug("append_to_output_buffer ing...")
 
-        # MUST RUN ON TARGET NODE BECAUSE TO STORE TO BUFFER WE MUST ACCESS TO
-        # LOCAL CONTENT TABLE
-        r =
-          :rpc.call(
-            n,
-            __MODULE__,
-            :append_to_output_buffer,
-            [%{@process_name => pn, @output_buffer_count => output_buffer_count}, bytes, 1]
-          )
+        append_to_output_buffer(
+          %{@process_name => pn, @output_buffer_count => output_buffer_count},
+          bytes,
+          1
+        )
 
-        case r do
-          {:badrpc, reason} ->
-            Logging.warn("respback::: badrpc call:~p", [reason])
+        Logging.debug("appended")
+
+        case node() do
+          ^n ->
+            # we are on target node which real buffers are here
+            Logging.debug("we are on main node")
+            :ok
 
           _ ->
-            :ok
+            # we are on remote node
+            Logging.debug("we are not on main node")
+
+            start_if_not_already_started_transfer_process(n, pn, output_buffer_count)
         end
+
+      # MUST RUN ON TARGET NODE BECAUSE TO STORE TO BUFFER WE MUST ACCESS TO
+      # LOCAL CONTENT TABLE
+      # r =
+      #   :rpc.call(
+      #     n,
+      #     __MODULE__,
+      #     :append_to_output_buffer,
+      #     [%{@process_name => pn, @output_buffer_count => output_buffer_count}, bytes, 1]
+      #   )
+
+      # case r do
+      #   {:badrpc, reason} ->
+      #     Logging.warn("respback::: badrpc call:~p", [reason])
+
+      #   _ ->
+      #     :ok
+      # end
 
       # :erlang.send({pn, n}, {:send_diameter_packet, dia_packet})
 
@@ -808,6 +959,25 @@ defmodule OnlineChargingSystem.Servers.Diameter.ConnectedClientProcess do
       {:aborted, _} -> {<<>>, 0}
       {v, c} when is_binary(v) -> {v, c}
     end
+  end
+
+  def del_out_buffer_if_its_empty(
+        _state = %{@process_name => pname},
+        buf_no
+      ) do
+    key = "out_buffer_#{pname}_#{buf_no}"
+
+    transactionally_do(fn ->
+      case DatabaseEngine.Interface.LKV.get_for_update(key) do
+        {_, n} when n > 0 ->
+          Logging.debug("buffer :~p has value n is :~p",[buf_no, n])
+          :mnesia.abort("has value")
+
+        _ ->
+          Logging.debug("buf :~p deleted",[buf_no])
+          DatabaseEngine.Interface.LKV.del(key)
+      end
+    end)
   end
 
   def fetch_and_empty_output_buffer(
