@@ -2,43 +2,22 @@ defmodule Dispatcher.Process.ProcessModel do
   defstruct name: nil, node_address: nil, local_pid: nil, start_time: nil
 end
 
-# :mnesia.dirty_delete(Dispatcher.Process.ProcessModel, "989360076133"
-defmodule Dispatcher.Process do
-  @moduledoc false
-
+defmodule Dispatcher.Process.RemoteTasks do
   require Logger
   require Utilities.Logging
   alias Utilities.Logging
-  require DatabaseEngine.Utils.EventLogger
-  alias DatabaseEngine.Utils.EventLogger
-  alias DatabaseEngine.Models.Utils, as: ModelUtils
 
-  @config Application.get_env(:dispatcher, __MODULE__)
-  @alive_response_for_UP @config[:alive_response_for_UP]
-  @maximum_wait_time_for_UP_responses @config[:maximum_wait_time_for_UP_responses]
-  @user_process_timeout @config[:user_process_timeout]
-  @process_creation_timeout @config[:process_creation_timeout]
-
-  alias :mnesia, as: Mnesia
-
-  def get_sample_sms(mobno) do
-    %DatabaseEngine.Models.SMS{
-      receiver: mobno,
-      sender: mobno
-    }
+  def remote_agent_to_create_process_locally(process_msg_tuple_list) do
+    Logging.debug("spawned for node name:~p", [node()])
+    init_pid = :erlang.whereis(:init)
+    :erlang.group_leader(init_pid, self())
+    start_bunch_of_process_locally(process_msg_tuple_list)
   end
 
-  def hello_world() do
-    Logging.debug("hello world.")
+  def get_module_by_message(message) do
+    ProcessManager.UnitProcess.Identifier.get_process_module(message)
   end
 
-  @spec start_local_gen_server(atom(), any(), [
-          {:debug, [any()]}
-          | {:hibernate_after, :infinity | non_neg_integer()}
-          | {:name, atom() | {any(), any()} | {any(), any(), any()}}
-          | {:spawn_opt, :link | :monitor | {any(), any()}}
-          | {:timeout, :infinity | non_neg_integer()}
-        ]) :: false | pid()
   def start_local_gen_server(module, args \\ [], options \\ []) do
     Logging.debug("Called With module:~p args:~p options:~p", [module, args, options])
 
@@ -60,14 +39,6 @@ defmodule Dispatcher.Process do
   def stop_local_gen_server(p) do
     Logging.debug("called.")
     GenServer.stop(p)
-  end
-
-  def get_module_by_message(message) do
-    ProcessManager.UnitProcess.Identifier.get_process_module(message)
-  end
-
-  def get_process_name_by_message(message) do
-    ProcessManager.UnitProcess.Identifier.get_process_name(message)
   end
 
   def start_bunch_of_process_locally(process_message_tuple_list) do
@@ -119,6 +90,41 @@ defmodule Dispatcher.Process do
       end
     end)
   end
+end
+
+# :mnesia.dirty_delete(Dispatcher.Process.ProcessModel, "989360076133"
+defmodule Dispatcher.Process do
+  @moduledoc false
+
+  require Logger
+  require Utilities.Logging
+  alias Utilities.Logging
+  require DatabaseEngine.Utils.EventLogger
+  alias DatabaseEngine.Utils.EventLogger
+  alias DatabaseEngine.Models.Utils, as: ModelUtils
+
+  @config Application.get_env(:dispatcher, __MODULE__)
+  @alive_response_for_UP @config[:alive_response_for_UP]
+  @maximum_wait_time_for_UP_responses @config[:maximum_wait_time_for_UP_responses]
+  @user_process_timeout @config[:user_process_timeout]
+  @process_creation_timeout @config[:process_creation_timeout]
+
+  alias :mnesia, as: Mnesia
+
+  def get_sample_sms(mobno) do
+    %DatabaseEngine.Models.SMS{
+      receiver: mobno,
+      sender: mobno
+    }
+  end
+
+  def hello_world() do
+    Logging.debug("hello world.")
+  end
+
+  def get_process_name_by_message(message) do
+    ProcessManager.UnitProcess.Identifier.get_process_name(message)
+  end
 
   def generate_processes(process_message_tuple_list) do
     Logging.debug("Called. process_message count:~p", [length(process_message_tuple_list)])
@@ -153,32 +159,12 @@ defmodule Dispatcher.Process do
       |> Enum.map(fn {nodename, process_msg_tuple_list} ->
         Logging.debug("nodename:~p", [nodename])
 
-        :erlang.spawn(nodename, fn ->
-          Logging.debug("spawned for node name:~p", [nodename])
-          init_pid = :erlang.whereis(:init)
-          :erlang.group_leader(init_pid, self())
-          Dispatcher.Process.start_bunch_of_process_locally(process_msg_tuple_list)
-        end)
-
-        # spawn(fn ->
-        #   Logging.debug("spawned for node name:~p", [nodename])
-
-        #   case :rpc.block_call(
-        #          nodename,
-        #          Dispatcher.Process,
-        #          :start_bunch_of_process_locally,
-        #          [process_msg_tuple_list],
-        #          @process_creation_timeout
-        #        ) do
-        #     {:badrpc, reason} ->
-        #       Logging.debug("BadRPC:~p", [reason])
-        #       false
-
-        #     other ->
-        #       Logging.debug("Rpc Returned:~p", [other])
-        #       true
-        #   end
-        # end)
+        :erlang.spawn(
+          nodename,
+          Dispatcher.Process.RemoteTasks,
+          :remote_agent_to_create_process_locally,
+          [process_msg_tuple_list]
+        )
       end)
 
     waiter(pids, Utilities.now() + @process_creation_timeout)
@@ -318,55 +304,6 @@ defmodule Dispatcher.Process do
     end
   end
 
-  def check_user_process_result(process_result, process_message_tuple = {pname, msg})
-      when is_pid(process_result) do
-    Logging.debug("PARSE PID X TO FIND OUT RESULT:~p", [process_result])
-    x = process_result
-
-    case :rpc.nb_yield(x, 0) do
-      :timeout ->
-        {x, process_message_tuple}
-
-      {:value, v} ->
-        case v do
-          r when is_boolean(r) ->
-            {r, process_message_tuple}
-
-          {:badrpc, {:EXIT, {:noproc, _}}} ->
-            Logging.debug("EXITED PROCESS!!!")
-
-            Logging.debug("there is no process for pname:~p", [pname])
-
-            {:atomic, _} =
-              Mnesia.transaction(fn ->
-                DatabaseEngine.Interface.Process.del(pname)
-                #                            Mnesia.dirty_delete({@table_name, pname})
-              end)
-
-            new_message = could_send_to_process_again(msg)
-
-            case new_message do
-              nil ->
-                Logging.debug("should wait beacuse it is soon to send message again")
-                {x, process_message_tuple}
-
-              _ ->
-                Logging.debug("send message again, new_message options:~p", [new_message.options])
-                new_pid = send_message({pname, new_message})
-                {new_pid, {pname, new_message}}
-            end
-
-          _ ->
-            Logging.warn(
-              "RPC VALUE is :~p (we expect boolean or badrpc. we consider it as false)",
-              [v]
-            )
-
-            {false, process_message_tuple}
-        end
-    end
-  end
-
   def check_user_process_result(process_result, process_message_tuple) do
     Logging.debug("process_result is :~p", [process_result])
     {process_result, process_message_tuple}
@@ -471,72 +408,6 @@ defmodule Dispatcher.Process do
           :ok
       end
     end)
-  end
-
-  @spec send_message({String.t(), DatabaseEngine.Models.SMS}) :: pid() | boolean()
-  def send_message(args = {process_name, message}) do
-    Logging.debug("Called With args:~p", [args])
-
-    tran_res =
-      Mnesia.transaction(fn ->
-        #          case Mnesia.read({@table_name, process_name}) do
-        result =
-          case DatabaseEngine.Interface.Process.get(process_name) do
-            v when v in [[], nil] ->
-              process_creation_result = create_process(process_name, message)
-              Logging.debug("Process creation result:~p", [process_creation_result])
-              process_creation_result
-
-            process_model = %Dispatcher.Process.ProcessModel{} ->
-              Logging.debug("Process Model:~p", [process_model])
-              process_model
-          end
-
-        case result do
-          false ->
-            false
-
-          %Dispatcher.Process.ProcessModel{node_address: node_name, local_pid: pid} ->
-            Logging.debug("call remote process By GenServer.Call(pid,message,timeout)")
-
-            r =
-              :rpc.async_call(
-                node_name,
-                GenServer,
-                :call,
-                [pid, {:ingress, message}, @user_process_timeout]
-              )
-
-            Logging.debug("async_call result:~p", [r])
-            r
-        end
-      end)
-
-    case tran_res do
-      {:atomic, v} ->
-        Logging.debug("Transaction Done With Return Value:~p", [v])
-
-        EventLogger.log_event(
-          ModelUtils.get_entity_type(message),
-          ModelUtils.get_entity_id(message),
-          "SEND_MSG",
-          %{"process_name" => process_name}
-        )
-
-        v
-
-      {:aborted, r} ->
-        Logging.debug("Transaction Failed With Return Value:~p", [r])
-
-        EventLogger.log_event(
-          ModelUtils.get_entity_type(message),
-          ModelUtils.get_entity_id(message),
-          "SEND_MSG_FAILED",
-          %{"process_name" => process_name}
-        )
-
-        r
-    end
   end
 
   def wait_for_refs(till_time, refs) when is_map(refs) do
@@ -757,14 +628,14 @@ defmodule Dispatcher.Process do
   def kill_process(_name) do
   end
 
-  def create_process(name, message) do
-    create_process(
-      name,
-      get_module_by_message(message),
-      Utilities.all_user_process_nodes(),
-      message
-    )
-  end
+  # def create_process(name, message) do
+  #   create_process(
+  #     name,
+  #     get_module_by_message(message),
+  #     Utilities.all_user_process_nodes(),
+  #     message
+  #   )
+  # end
 
   def create_process(_, _, [], _) do
     Logging.debug("no nodes passed")
