@@ -104,6 +104,7 @@ defmodule Dispatcher.Process do
   alias DatabaseEngine.Models.Utils, as: ModelUtils
 
   @config Application.get_env(:dispatcher, __MODULE__)
+  @process_nodes @config[:process_nodes]
   @alive_response_for_UP @config[:alive_response_for_UP]
   @maximum_wait_time_for_UP_responses @config[:maximum_wait_time_for_UP_responses]
   @user_process_timeout @config[:user_process_timeout]
@@ -128,46 +129,61 @@ defmodule Dispatcher.Process do
 
   def generate_processes(process_message_tuple_list) do
     Logging.debug("Called. process_message count:~p", [length(process_message_tuple_list)])
-    nodes = Utilities.all_active_nodes() |> Enum.shuffle()
 
-    node_count = length(nodes)
-    process_count_per_node = Kernel.ceil(length(process_message_tuple_list) / node_count)
-
-    start_indices =
-      :lists.seq(0, node_count - 1)
-      |> Enum.map(fn x ->
-        x * process_count_per_node
+    nodes =
+      Utilities.all_active_nodes()
+      |> Enum.filter(fn n ->
+        @process_nodes |> Enum.member?(to_string(n))
       end)
+      |> Enum.shuffle()
 
-    slices =
-      start_indices
-      |> Enum.map(fn s ->
-        Enum.slice(process_message_tuple_list, s, process_count_per_node)
-      end)
+    case nodes do
+      [] ->
+        Logging.error("no process nodes found to dispatch. actives:~p allowed list:~p", [
+          Utilities.all_active_nodes(),
+          @process_nodes
+        ])
 
-    node_slice = Enum.zip(nodes, slices)
+      _ ->
+        node_count = length(nodes)
+        process_count_per_node = Kernel.ceil(length(process_message_tuple_list) / node_count)
 
-    Logging.debug("node_slice:~p", [
-      node_slice
-      |> Enum.map(fn {n, lst} ->
-        {n, lst |> Enum.map(fn {pn, _} -> pn end)}
-      end)
-    ])
+        start_indices =
+          :lists.seq(0, node_count - 1)
+          |> Enum.map(fn x ->
+            x * process_count_per_node
+          end)
 
-    pids =
-      node_slice
-      |> Enum.map(fn {nodename, process_msg_tuple_list} ->
-        Logging.debug("nodename:~p", [nodename])
+        slices =
+          start_indices
+          |> Enum.map(fn s ->
+            Enum.slice(process_message_tuple_list, s, process_count_per_node)
+          end)
 
-        :erlang.spawn(
-          nodename,
-          Dispatcher.Process.RemoteTasks,
-          :remote_agent_to_create_process_locally,
-          [process_msg_tuple_list]
-        )
-      end)
+        node_slice = Enum.zip(nodes, slices)
 
-    waiter(pids, Utilities.now() + @process_creation_timeout)
+        Logging.debug("node_slice:~p", [
+          node_slice
+          |> Enum.map(fn {n, lst} ->
+            {n, lst |> Enum.map(fn {pn, _} -> pn end)}
+          end)
+        ])
+
+        pids =
+          node_slice
+          |> Enum.map(fn {nodename, process_msg_tuple_list} ->
+            Logging.debug("nodename:~p", [nodename])
+
+            :erlang.spawn(
+              nodename,
+              Dispatcher.Process.RemoteTasks,
+              :remote_agent_to_create_process_locally,
+              [process_msg_tuple_list]
+            )
+          end)
+
+        waiter(pids, Utilities.now() + @process_creation_timeout)
+    end
   end
 
   def waiter(pids, wait_till_time \\ :infinity) do

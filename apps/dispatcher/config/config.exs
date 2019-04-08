@@ -33,8 +33,8 @@ import_config "user_process.exs"
 config :dispatcher,
   input_queues: [
     "n2@s1.kafka.local": ["in_dummy", "gsm_ingress"],
-    "n1@s1.kafka.local": ["diameter_queue"],
-    "n3@s1.kafka.local": ["in_imi", "in_irmtn", "radius_input_q", ]
+    "n1@s1.kafka.local": ["diameter_queue", "in_dummy"],
+    "n3@s1.kafka.local": ["in_imi", "in_irmtn", "radius_input_q"]
   ]
 
 config :dispatcher, Dispatcher.Process,
@@ -44,4 +44,5 @@ config :dispatcher, Dispatcher.Process,
   maximum_wait_time_for_UP_responses: System.get_env("DISPATCHER_UP_RESP_MAX_TIMEOUT") || 7_000,
   user_process_timeout: System.get_env("DISPATCHER_UP_LOCAL_CALL_TIMEOUT") || 5_000,
   process_creation_timeout: System.get_env("DISPATCHER_UP_CREATION_TIMEOUT") || 1_000,
-  dispatcher_fail_Q: System.get_env("DISPATCHER_FAIL_Q") || "dispatcher_fail_Q"
+  dispatcher_fail_Q: System.get_env("DISPATCHER_FAIL_Q") || "dispatcher_fail_Q",
+  process_nodes: (System.get_env("DISPATCHER_PROCESS_NODES") || "") |> String.split(",")
