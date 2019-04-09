@@ -6,6 +6,7 @@ defmodule Dispatcher.Process.Statistics do
   def local_processes_state_of_type() do
     DatabaseEngine.Interface.LProcess.all_process_states()
     |> Enum.map(fn {_, s} -> s end)
+
     # |> Enum.filter(fn x ->
     #   filter_func.(x)
     # end)
@@ -53,12 +54,16 @@ defmodule Dispatcher.Process.Statistics do
     r
   end
 
+  # def debug_purpose_fn() do
+  #   Dispatcher.Process.Statistics.local_total_statistic()
+  # end
+
   def total_statistic(nodes) do
     tasks =
       nodes
       |> Enum.map(fn nodename ->
         Utilities.remote_async_task(nodename, fn ->
-          __MODULE__.local_total_statistic()
+           Dispatcher.Process.Statistics.local_total_statistic()
         end)
       end)
 
