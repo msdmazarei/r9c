@@ -3,12 +3,12 @@ defmodule Dispatcher.Process.Statistics do
   require Utilities.Logging
   alias Utilities.Logging
 
-  def local_processes_state_of_type(filter_func) do
+  def local_processes_state_of_type() do
     DatabaseEngine.Interface.LProcess.all_process_states()
     |> Enum.map(fn {_, s} -> s end)
-    |> Enum.filter(fn x ->
-      filter_func.(x)
-    end)
+    # |> Enum.filter(fn x ->
+    #   filter_func.(x)
+    # end)
   end
 
   def statistics_of_process(state) do
@@ -19,9 +19,9 @@ defmodule Dispatcher.Process.Statistics do
     }
   end
 
-  def local_total_statistic(filter_func \\ fn _ -> true end) do
+  def local_total_statistic() do
     Logging.debug("called.")
-    states = local_processes_state_of_type(filter_func)
+    states = local_processes_state_of_type()
 
     r =
       states
@@ -53,7 +53,7 @@ defmodule Dispatcher.Process.Statistics do
     r
   end
 
-  def total_statistic(nodes, process_state_filter_func \\ fn _ -> true end) do
+  def total_statistic(nodes) do
     tasks =
       nodes
       |> Enum.map(fn nodename ->
