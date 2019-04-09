@@ -477,6 +477,7 @@ defmodule ProcessManager.UnitProcess.GeneralUnitProcess do
 
         if pmodel != nil and pmodel.local_pid == self() do
           DatabaseEngine.Interface.Process.del(state.process_name)
+          DatabaseEngine.Interface.LProcess.del(state.process_name)
         end
 
         state

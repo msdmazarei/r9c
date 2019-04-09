@@ -70,6 +70,7 @@ defmodule Dispatcher.Process.RemoteTasks do
                   :mnesia.abort("already defined")
                 else
                   DatabaseEngine.Interface.Process.set(pn, process_model)
+                  DatabaseEngine.Interface.LProcess.set(pn, process_model)
                 end
               end,
               [],

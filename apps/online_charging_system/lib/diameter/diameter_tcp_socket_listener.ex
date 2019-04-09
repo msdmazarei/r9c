@@ -16,6 +16,7 @@ defmodule OnlineChargingSystem.Servers.Diameter.TcpServer do
   @socket_process_map "socket_process_map"
 
   @impl true
+  @spec init(map()) :: {:ok, %{optional(<<_::64, _::_*8>>) => any()}} | {:stop, any()}
   def init(%{"ip" => ip_address, "port" => tcp_port}) do
     Logging.debug("Called.")
 
@@ -91,7 +92,7 @@ defmodule OnlineChargingSystem.Servers.Diameter.TcpServer do
     {in_, out_} =
       per_client
       |> Enum.reduce({0, 0}, fn m, {i, o} ->
-        {i + (m["in"] || 0), o + (m["out"] || 0)}
+        {i + (m["processed_packets"] || 0), o + (m["sent_packets"] || 0)}
       end)
 
     {
@@ -249,5 +250,46 @@ defmodule OnlineChargingSystem.Servers.Diameter.TcpServer do
     :timer.cancel(check_incoming_connection_tref)
     :gen_tcp.close(listen_socket)
     state
+  end
+
+  def print_breif(server_pid) do
+    t1 =
+      Task.async(fn ->
+        GenServer.call(server_pid, :packets_stat)
+      end)
+
+    t2 =
+      Task.async(fn ->
+        Dispatcher.Process.Dispatching.Statistics.total_stats()
+      end)
+
+    t3 =
+      Task.async(fn ->
+        Dispatcher.Process.Statistics.total_statistic(Utilities.all_active_nodes())
+      end)
+
+    [t1r, t2r, t3r] =
+      [t1, t2, t3]
+      |> Enum.map(fn x ->
+        Task.await(x)
+      end)
+
+    :io.fwrite(
+      " ~n~nTCPServer(~p) ---> (~p) Dispatcher[processed:(~p)] (~p) ----- (~p) Processes~n",
+      [
+        t1r["in"],
+        t2r["diameter_queue"]["arrived"],
+        t2r["diameter_queue"]["processed"],
+        t2r["diameter_queue"]["successfully_delivered_to_uprocess"],
+        t3r["total"]["arrived_messages"]
+      ]
+    )
+
+    :io.fwrite("PROCESS COUNT:~p~n", [t3r["total"]["process_count"]])
+
+    :io.fwrite(" ~n TCPServer(~p)  <----- (~p) Processes~n", [
+      t1r["out"],
+      t3r["total"]["processed_messages"]
+    ])
   end
 end
