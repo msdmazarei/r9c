@@ -6,7 +6,9 @@ defmodule Dispatcher.Process.Statistics do
   def local_processes_state_of_type(filter_func) do
     DatabaseEngine.Interface.LProcess.all_process_states()
     |> Enum.map(fn {_, s} -> s end)
-    |> Enum.filter(filter_func)
+    |> Enum.filter(fn x ->
+      filter_func.(x)
+    end)
   end
 
   def statistics_of_process(state) do
@@ -18,70 +20,88 @@ defmodule Dispatcher.Process.Statistics do
   end
 
   def local_total_statistic(filter_func \\ fn _ -> true end) do
+    Logging.debug("called.")
     states = local_processes_state_of_type(filter_func)
 
-    states
-    |> Enum.map(&statistics_of_process/1)
-    |> Enum.reduce(
-      %{
-        "arrived_messages" => 0,
-        "processed_messages" => 0,
-        "process_count" => 0
-      },
-      fn %{
-           "processed_messages" => processed_messages,
-           "arrived_messages" => arrived_messages
-         },
-         %{
-           "arrived_messages" => t_arrived_messages,
-           "processed_messages" => t_processed_messages,
-           "process_count" => process_count
-         } ->
+    r =
+      states
+      |> Enum.map(&statistics_of_process/1)
+      |> Enum.reduce(
         %{
-          "arrived_messages" => t_arrived_messages + (processed_messages || 0),
-          "processed_messages" => t_processed_messages + (arrived_messages || 0),
-          "process_count" => process_count + 1
-        }
-      end
-    )
+          "arrived_messages" => 0,
+          "processed_messages" => 0,
+          "process_count" => 0
+        },
+        fn %{
+             "processed_messages" => processed_messages,
+             "arrived_messages" => arrived_messages
+           },
+           %{
+             "arrived_messages" => t_arrived_messages,
+             "processed_messages" => t_processed_messages,
+             "process_count" => process_count
+           } ->
+          %{
+            "arrived_messages" => t_arrived_messages + (processed_messages || 0),
+            "processed_messages" => t_processed_messages + (arrived_messages || 0),
+            "process_count" => process_count + 1
+          }
+        end
+      )
+
+    Logging.debug("rtn:~p", [r])
+    r
   end
 
   def total_statistic(nodes, process_state_filter_func \\ fn _ -> true end) do
     tasks =
       nodes
       |> Enum.map(fn nodename ->
-        Task.async(fn ->
-          case :rpc.call(
-                 nodename,
-                 __MODULE__,
-                 :local_total_statistic,
-                 [process_state_filter_func],
-                 5_000
-               ) do
-            {:badrpc, reason} ->
-              Logging.error("problem to retrive process statistics for node:~p. reason: ~p", [
-                nodename,
-                reason
-              ])
-
-              {nodename,
-               %{
-                 "arrived_messages" => 0,
-                 "processed_messages" => 0,
-                 "process_count" => 0
-               }}
-
-            v ->
-              {nodename, v}
-          end
+        Utilities.remote_async_task(nodename, fn ->
+          __MODULE__.local_total_statistic()
         end)
       end)
 
-    per_node_result =
-      tasks
-      |> Enum.map(fn t ->
-        Task.await(t)
-      end)
+    results =
+      Utilities.await_multi_task(tasks, 5_000, %{
+        "arrived_messages" => 0,
+        "processed_messages" => 0,
+        "process_count" => 0
+      })
+
+    #   Task.async(fn ->
+    #     case :rpc.call(
+    #            nodename,
+    #            __MODULE__,
+    #            :local_total_statistic,
+    #            [process_state_filter_func],
+    #            5_000
+    #          ) do
+    #       {:badrpc, reason} ->
+    #         Logging.error("problem to retrive process statistics for node:~p. reason: ~p", [
+    #           nodename,
+    #           reason
+    #         ])
+
+    #         {nodename,
+    #          %{
+    #            "arrived_messages" => 0,
+    #            "processed_messages" => 0,
+    #            "process_count" => 0
+    #          }}
+
+    #       v ->
+    #         {nodename, v}
+    #     end
+    #   end)
+    # end)
+
+    per_node_result = Enum.zip(nodes, results)
+    Logging.debug("per_node_result:~p", [per_node_result])
+    # tasks
+    # |> Enum.map(fn t ->
+    #   Task.await(t)
+    # end)
 
     total =
       per_node_result

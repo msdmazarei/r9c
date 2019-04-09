@@ -351,4 +351,88 @@ defmodule Utilities do
     end)
     |> Enum.map(fn {_, l} -> l end)
   end
+
+  def remote_async_task(node, func) do
+    my_ref = make_ref()
+    my_pid = self()
+
+    :erlang.spawn(node, fn ->
+      res = func.()
+      send(my_pid, {my_ref, res})
+    end)
+
+    my_ref
+  end
+
+  def await_remote_task(remote_task_return, timeout, timeout_result) do
+    receive do
+      {^remote_task_return, res} ->
+        res
+    after
+      timeout ->
+        timeout_result
+    end
+  end
+
+  def await_multi_task(
+        remote_task_return_list,
+        timeout,
+        timeout_result,
+        fin_result \\ [],
+        start_time \\ Utilities.now()
+      ) do
+    if Utilities.now() > start_time + timeout or
+         length(remote_task_return_list) == length(fin_result) do
+      remote_task_return_list
+      |> Enum.map(fn x ->
+        found_item =
+          fin_result
+          |> Enum.find(fn {y, _} ->
+            y == x
+          end)
+
+        found_item || timeout_result
+      end)
+      |> Enum.map(fn x ->
+        case x do
+          {_, res} -> res
+          _ -> x
+        end
+      end)
+    else
+      fin_result =
+        receive do
+          x ->
+            # check, is x something we expect that?
+            is_our_result =
+              remote_task_return_list
+              |> Enum.find(fn item ->
+                case x do
+                  {^item, _} -> true
+                  _ -> false
+                end
+              end)
+
+            if is_our_result == nil do
+              # requeue x
+              send(self(), x)
+
+              fin_result
+            else
+              [x | fin_result]
+            end
+        after
+          0 ->
+            fin_result
+        end
+
+      await_multi_task(
+        remote_task_return_list,
+        timeout,
+        timeout_result,
+        fin_result,
+        start_time
+      )
+    end
+  end
 end
