@@ -352,16 +352,22 @@ defmodule Utilities do
     |> Enum.map(fn {_, l} -> l end)
   end
 
-  def func_reomte_async_task(my_pid, my_ref, func) do
-    res = func.()
+  def func_reomte_async_task(my_pid, my_ref, module, func, arguments) do
+    res = apply(module, func, arguments)
     send(my_pid, {my_ref, res})
   end
 
-  def remote_async_task(node, func) do
+  def remote_async_task(node, module, func, arguments) do
     my_ref = make_ref()
     my_pid = self()
 
-    :erlang.spawn(node, __MODULE__, :func_reomte_async_task, [my_pid, my_ref, func])
+    :erlang.spawn(node, __MODULE__, :func_reomte_async_task, [
+      my_pid,
+      my_ref,
+      module,
+      func,
+      arguments
+    ])
 
     my_ref
   end

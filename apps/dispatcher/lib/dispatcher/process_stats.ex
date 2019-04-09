@@ -62,9 +62,12 @@ defmodule Dispatcher.Process.Statistics do
     tasks =
       nodes
       |> Enum.map(fn nodename ->
-        Utilities.remote_async_task(nodename, fn ->
-           Dispatcher.Process.Statistics.local_total_statistic()
-        end)
+        Utilities.remote_async_task(
+          nodename,
+          Dispatcher.Process.Statistics,
+          :local_total_statistic,
+          []
+        )
       end)
 
     results =
