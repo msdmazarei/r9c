@@ -342,8 +342,8 @@ defmodule DatabaseEngine.DurableQueue do
         |> Map.to_list()
         |> Enum.map(fn {part_no, part_pid} ->
           stat =
-            case :sys.get_state(part_pid) do
-              %KafkaEx.GenConsumer.State{consumer_state: m} when is_map(m) ->
+            case DatabaseEngine.Interface.LProcessData.get({"consumer",part_pid}) do
+               m when is_map(m) ->
                 %{
                   "arrived" => m["arrived_messages"],
                   "processed" => m["processed_messages"],

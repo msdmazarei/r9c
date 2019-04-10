@@ -5,22 +5,25 @@ defmodule ProcessManager.Script do
 
   alias Utilities.Logging
   alias :luerl, as: LUA
-  @lua_module_path Application.get_env(:process_manager,__MODULE__ )[:lua_modules_path]
+  @lua_module_path Application.get_env(:process_manager, __MODULE__)[:lua_modules_path]
   @orig_message_key :orig_message_key
   @spec run_script(String.t(), any(), any(), integer()) ::
           {:return, any()} | {:error, any()}
   @spec run_script(any(), any(), any(), any(), :infinity | non_neg_integer()) :: {any(), any()}
   def parse_rtn_value(r, lstate) do
-    Logging.debug("trying to parse returned value:~p",[r])
-    parsed_tables = r
-    |> Enum.map(fn x ->
-      case x do
-        {:tref, _} -> LUA.decode(x, lstate)
-        {:function, _, _, _, _, _} -> LUA.decode(x,lstate)
-        _ -> x
-      end
-    end)
-    Logging.debug("to_elixir will call by value:~p",[parsed_tables])
+    Logging.debug("trying to parse returned value:~p", [r])
+
+    parsed_tables =
+      r
+      |> Enum.map(fn x ->
+        case x do
+          {:tref, _} -> LUA.decode(x, lstate)
+          {:function, _, _, _, _, _} -> LUA.decode(x, lstate)
+          _ -> x
+        end
+      end)
+
+    Logging.debug("to_elixir will call by value:~p", [parsed_tables])
 
     parsed_tables
     |> ProcessManager.Script.Utilities.to_elixir()
@@ -31,7 +34,8 @@ defmodule ProcessManager.Script do
         msg,
         user_process_state,
         additional_functionality \\ %{},
-        script_run_timeout \\ 5000
+        script_run_timeout \\ 5000,
+        using_cache \\ true
       ) do
     # Logging.debug(
     #   "Called. script_to_run:~p msg:~p user_process_state:~p additional_functionalities:~p timeout:~p",
@@ -40,30 +44,90 @@ defmodule ProcessManager.Script do
     script_to_run =
       "package.path = package.path .. \";" <> (@lua_module_path || "") <> "\"\n" <> script_to_run
 
+    script_hash_value = :crypto.hash(:md5, script_to_run) |> Base.encode16(case: :lower)
+    script_key = "script_cached_#{script_hash_value}"
+
+    {compiled_script, lua_state} =
+      if using_cache do
+        case DatabaseEngine.Interface.LKV.get(script_key) do
+
+          nil ->
+            Logging.debug("no script found in cache")
+            {nil, nil}
+
+          {till_time, compiled_script, lua_state} ->
+
+            if Utilities.now() > till_time do
+              Logging.debug("script found in cache but it is expired")
+              DatabaseEngine.Interface.LKV.del(script_key)
+              {nil, nil}
+            else
+              Logging.debug("script found in cache.")
+              {compiled_script, lua_state}
+            end
+        end
+      else
+        Logging.debug("no cache use for this script")
+        {nil, nil}
+      end
+
     Logging.debug("script to run:~p", [script_to_run])
     main_process_id = self()
     ref = make_ref()
 
     pid =
-      Process.spawn(
-        fn ->
-          try do
-            lua_state = init_lua(msg, additional_functionality)
+      Process.spawn(fn ->
+        try do
+          lua_state =
+            case lua_state do
+              nil ->
+                init_lua(msg, additional_functionality)
 
-            set_orig_message(msg, lua_state)
-            set_user_process_state(user_process_state)
+              _ ->
+                lua_state
+            end
 
-            {r, lstate} = LUA.do(script_to_run, lua_state)
+          set_orig_message(msg, lua_state)
+          set_user_process_state(user_process_state)
 
-            send(main_process_id, {:script, ref, :return, parse_rtn_value(r, lstate)})
-          rescue
-            e ->
-              Logging.debug("Exception happen it is :~p", [e])
-              send(main_process_id, {:script, ref, :error, e})
+          {compiled_script, lua_state} =
+            case compiled_script do
+              nil ->
+                Logging.debug("compiling script...")
+                case LUA.load(script_to_run, lua_state) do
+                  {:ok, compiled_script, lua_state} ->
+                    Logging.debug("compiled successfully. store it in cache for 5 min")
+                    DatabaseEngine.Interface.LKV.set(
+                      script_key,
+                      {Utilities.now() + 300_000, compiled_script, lua_state}
+                    )
+
+                    {compiled_script, lua_state}
+
+                  {:error, reason} ->
+                    Logging.warn("problem to compile lua script. reason:~p", [reason])
+                    {nil, nil}
+                end
+
+              _ ->
+                {compiled_script, lua_state}
+            end
+
+          case {compiled_script, lua_state} do
+            {nil, nil} ->
+              send(main_process_id, {:script, ref, :error, "script not compiled"})
+
+            {a, b} when a != nil and b != nil ->
+              Logging.debug("executing the compiled script.")
+              {r, lstate} = LUA.do(compiled_script, lua_state)
+              send(main_process_id, {:script, ref, :return, parse_rtn_value(r, lstate)})
           end
-        end,
-        priority: :low
-      )
+        rescue
+          e ->
+            Logging.debug("Exception happen it is :~p", [e])
+            send(main_process_id, {:script, ref, :error, e})
+        end
+      end,[])
 
     receive do
       {:script, m, status, r} when m == ref ->
@@ -199,7 +263,6 @@ defmodule ProcessManager.Script do
       ProcessManager.Script.Functionalities.Diameter.lua_functionalities(),
       ProcessManager.Script.Functionalities.Utils.lua_functionalities(),
       ProcessManager.Script.Functionalities.OCSAccount.lua_functionalities()
-
     ]
 
     fns_map =

@@ -54,12 +54,12 @@ defmodule ProcessManager.UnitProcess.GeneralUnitProcess do
       end
 
       def delete_process_stat_data(state) do
-        process_key = "#{state.process_name}_stat"
+        process_key = "#{state.process_name}_unit_process_stat"
         DatabaseEngine.Interface.LProcessData.del(process_key)
       end
 
       def update_process_stat_data(state) do
-        process_key = "#{state.process_name}_stat"
+        process_key = "#{state.process_name}_unit_process_stat"
 
         data = %{
           "processed_messages" => state.processed_messages,

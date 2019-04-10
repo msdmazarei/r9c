@@ -4,7 +4,15 @@ defmodule Dispatcher.Process.Statistics do
   alias Utilities.Logging
 
   def local_processes_state_of_type() do
-    DatabaseEngine.Interface.LProcessData.all()|>Enum.map(&DatabaseEngine.Interface.LProcessData.get/1)
+    DatabaseEngine.Interface.LProcessData.all()
+    |> Enum.filter(fn x ->
+      if is_binary(x) do
+        String.ends_with?(x, "_unit_process_stat")
+      else
+        false
+      end
+    end)
+    |> Enum.map(&DatabaseEngine.Interface.LProcessData.get/1)
   end
 
   def local_total_statistic() do
@@ -32,8 +40,8 @@ defmodule Dispatcher.Process.Statistics do
              "repeated_messages" => t_repeated_messages
            } ->
           %{
-            "arrived_messages" => t_arrived_messages + (processed_messages || 0),
-            "processed_messages" => t_processed_messages + (arrived_messages || 0),
+            "arrived_messages" => t_arrived_messages + (arrived_messages || 0),
+            "processed_messages" => t_processed_messages + (processed_messages || 0),
             "process_count" => process_count + 1,
             "repeated_messages" => t_repeated_messages + (repeated_messages || 0)
           }

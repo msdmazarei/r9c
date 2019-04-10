@@ -22,6 +22,13 @@ defmodule Dispatcher.Consumers.InQConsumer do
 
   @requeue_retry_count 5
 
+  def update_stats(state) do
+    DatabaseEngine.Interface.LProcessData.set(
+      {"consumer", self()},
+      state
+    )
+  end
+
   def init(topic, partition) do
     Logging.debug("Called. topic:~p partition:~p", [topic, partition])
 
@@ -198,6 +205,7 @@ defmodule Dispatcher.Consumers.InQConsumer do
       |> Map.put(@process_duration, du)
       |> Map.put(@last_arrived_message_batch_size, last_arrived_message_batch_size)
 
+    update_stats(new_state)
     {:async_commit, new_state}
   end
 end
