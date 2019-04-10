@@ -142,7 +142,8 @@ defmodule OnlineChargingSystem.Servers.Diameter.ConnectedClientProcess.ConvertBy
             when is_number(pbys) ->
               state =
                 if pbys == 0 do
-                  :timer.sleep(20)
+                  # :timer.sleep(20)
+
                   state
                 else
                   du_conversion = Utilities.now() - st_conversion
