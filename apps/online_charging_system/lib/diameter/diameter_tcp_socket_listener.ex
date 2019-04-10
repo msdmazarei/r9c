@@ -275,12 +275,16 @@ defmodule OnlineChargingSystem.Servers.Diameter.TcpServer do
       end)
 
     :io.fwrite(
-      " ~n~nTCPServer(~p) ---> [A:(~p)] Dispatcher[processed:[P:(~p)]] [SD:(~p)] -----> [A:(~p), P:(~p)] Processes~n",
+      " ~n~nTCPServer(~p) ---> [A:(~p)] Dispatcher[processed:[P:(~p)] REQU:(~p) DRP:(~p)] [SD:(~p)] -----> [A:(~p), P:(~p)] Processes~n",
       [
         t1r["in"],
+
         t2r["diameter_queue"]["arrived"],
         t2r["diameter_queue"]["processed"],
+        t2r["diameter_queue"]["need_to_requeue_count"],
+        t2r["diameter_queue"]["dropped_messages_cause_of_retry"],
         t2r["diameter_queue"]["successfully_delivered_to_uprocess"],
+
         t3r["total"]["arrived_messages"],
         t3r["total"]["processed_messages"]
       ]
