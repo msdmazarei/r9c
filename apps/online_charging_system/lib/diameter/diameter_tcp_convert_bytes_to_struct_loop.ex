@@ -131,39 +131,36 @@ defmodule OnlineChargingSystem.Servers.Diameter.ConnectedClientProcess.ConvertBy
       after
         0 ->
           st_conversion = Utilities.now()
+          r = convertBytesToStruct(mnesia_buffer_key, mnesia_packets_key)
+          du_conversion = Utilities.now() - st_conversion
 
-          case convertBytesToStruct(mnesia_buffer_key, mnesia_packets_key) do
+          case r do
             {:terminate, reason} ->
               state = state |> Map.put(@terminate_reason, reason)
               {false, state}
 
+            {{0, _}, _, _} ->
+              {true, state}
+
             {{pbys, gpkts}, du_bytes_to_struct_time_ms_detection_part,
              du_bytes_to_struct_time_ms_mnesia_part}
-            when is_number(pbys) ->
-              state =
-                if pbys == 0 do
-                  # :timer.sleep(20)
+            when is_number(pbys) and pbys > 0 ->
+              new_state =
+                state
+                |> Map.put(@processed_bytes, (processed_bytes || 0) + pbys)
+                |> Map.put(@generated_packets, (generated_packets || 0) + gpkts)
+                |> Map.put(@bytes_to_struct_time_ms, bytes_to_struct_time_ms + du_conversion)
+                |> Map.put(
+                  @bytes_to_struct_time_ms_detection_part,
+                  bytes_to_struct_time_ms_detection_part +
+                    du_bytes_to_struct_time_ms_detection_part
+                )
+                |> Map.put(
+                  @bytes_to_struct_time_ms_mnesia_part,
+                  bytes_to_struct_time_ms_mnesia_part + du_bytes_to_struct_time_ms_mnesia_part
+                )
 
-                  state
-                else
-                  du_conversion = Utilities.now() - st_conversion
-
-                  state
-                  |> Map.put(@processed_bytes, (processed_bytes || 0) + pbys)
-                  |> Map.put(@generated_packets, (generated_packets || 0) + gpkts)
-                  |> Map.put(@bytes_to_struct_time_ms, bytes_to_struct_time_ms + du_conversion)
-                  |> Map.put(
-                    @bytes_to_struct_time_ms_detection_part,
-                    bytes_to_struct_time_ms_detection_part +
-                      du_bytes_to_struct_time_ms_detection_part
-                  )
-                  |> Map.put(
-                    @bytes_to_struct_time_ms_mnesia_part,
-                    bytes_to_struct_time_ms_mnesia_part + du_bytes_to_struct_time_ms_mnesia_part
-                  )
-                end
-
-              {true, state}
+              {true, new_state}
           end
       end
 
