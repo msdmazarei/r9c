@@ -53,6 +53,11 @@ defmodule ProcessManager.UnitProcess.GeneralUnitProcess do
         )
       end
 
+      def delete_process_stat_data(state) do
+        process_key = "#{state.process_name}_stat"
+        DatabaseEngine.Interface.LProcessData.del(process_key)
+      end
+
       def update_process_stat_data(state) do
         process_key = "#{state.process_name}_stat"
 
@@ -311,7 +316,7 @@ defmodule ProcessManager.UnitProcess.GeneralUnitProcess do
             }
 
             update_process_stat_data(state)
-            {:noreply, true, state}
+            {:noreply,  state}
           else
             script = ProcessManager.UnitProcess.Identifier.get_script(msg, state)
 
@@ -365,7 +370,7 @@ defmodule ProcessManager.UnitProcess.GeneralUnitProcess do
             end
 
             update_process_stat_data(state)
-            {:noreply, true, state}
+            {:noreply, state}
           end
 
         Logging.debug("pname :~p log_event called", [process_name])
@@ -377,6 +382,7 @@ defmodule ProcessManager.UnitProcess.GeneralUnitProcess do
           %{}
         )
 
+        Logging.debug("returns:~p",[rtn])
         rtn
       end
 
@@ -503,6 +509,7 @@ defmodule ProcessManager.UnitProcess.GeneralUnitProcess do
         if pmodel != nil and pmodel.local_pid == self() do
           DatabaseEngine.Interface.Process.del(state.process_name)
           DatabaseEngine.Interface.LProcess.del(state.process_name)
+          delete_process_stat_data(state)
         end
 
         state
