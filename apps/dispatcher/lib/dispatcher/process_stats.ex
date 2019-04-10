@@ -4,20 +4,7 @@ defmodule Dispatcher.Process.Statistics do
   alias Utilities.Logging
 
   def local_processes_state_of_type() do
-    DatabaseEngine.Interface.LProcess.all_process_states()
-    |> Enum.map(fn {_, s} -> s end)
-
-    # |> Enum.filter(fn x ->
-    #   filter_func.(x)
-    # end)
-  end
-
-  def statistics_of_process(state) do
-    %{
-      "processed_messages" => state.processed_messages,
-      "arrived_messages" => state.arrived_messages,
-      "last_arrived_message_time" => state.last_arrived_message_time
-    }
+    DatabaseEngine.Interface.LProcessData.all()|>Enum.map(&DatabaseEngine.Interface.LProcessData.get/1)
   end
 
   def local_total_statistic() do
@@ -26,26 +13,29 @@ defmodule Dispatcher.Process.Statistics do
 
     r =
       states
-      |> Enum.map(&statistics_of_process/1)
       |> Enum.reduce(
         %{
           "arrived_messages" => 0,
           "processed_messages" => 0,
+          "repeated_messages" => 0,
           "process_count" => 0
         },
         fn %{
              "processed_messages" => processed_messages,
-             "arrived_messages" => arrived_messages
+             "arrived_messages" => arrived_messages,
+             "repeated_messages" => repeated_messages
            },
            %{
              "arrived_messages" => t_arrived_messages,
              "processed_messages" => t_processed_messages,
-             "process_count" => process_count
+             "process_count" => process_count,
+             "repeated_messages" => t_repeated_messages
            } ->
           %{
             "arrived_messages" => t_arrived_messages + (processed_messages || 0),
             "processed_messages" => t_processed_messages + (arrived_messages || 0),
-            "process_count" => process_count + 1
+            "process_count" => process_count + 1,
+            "repeated_messages" => t_repeated_messages + (repeated_messages || 0)
           }
         end
       )
@@ -74,42 +64,12 @@ defmodule Dispatcher.Process.Statistics do
       Utilities.await_multi_task(tasks, 5_000, %{
         "arrived_messages" => 0,
         "processed_messages" => 0,
-        "process_count" => 0
+        "process_count" => 0,
+        "repeated_messages" => 0
       })
-
-    #   Task.async(fn ->
-    #     case :rpc.call(
-    #            nodename,
-    #            __MODULE__,
-    #            :local_total_statistic,
-    #            [process_state_filter_func],
-    #            5_000
-    #          ) do
-    #       {:badrpc, reason} ->
-    #         Logging.error("problem to retrive process statistics for node:~p. reason: ~p", [
-    #           nodename,
-    #           reason
-    #         ])
-
-    #         {nodename,
-    #          %{
-    #            "arrived_messages" => 0,
-    #            "processed_messages" => 0,
-    #            "process_count" => 0
-    #          }}
-
-    #       v ->
-    #         {nodename, v}
-    #     end
-    #   end)
-    # end)
 
     per_node_result = Enum.zip(nodes, results)
     Logging.debug("per_node_result:~p", [per_node_result])
-    # tasks
-    # |> Enum.map(fn t ->
-    #   Task.await(t)
-    # end)
 
     total =
       per_node_result
@@ -117,7 +77,8 @@ defmodule Dispatcher.Process.Statistics do
         %{
           "arrived_messages" => 0,
           "processed_messages" => 0,
-          "process_count" => 0
+          "process_count" => 0,
+          "repeated_messages" => 0
         },
         fn {_, kv_map}, tkv_map ->
           kv_map

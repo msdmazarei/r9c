@@ -48,8 +48,22 @@ defmodule ProcessManager.UnitProcess.GeneralUnitProcess do
           last_cel_result: nil,
           script_imutable_vars: nil,
           processed_messages: 0,
-          arrived_messages: 0
+          arrived_messages: 0,
+          repeated_messages: 0
         )
+      end
+
+      def update_process_stat_data(state) do
+        process_key = "#{state.process_name}_stat"
+
+        data = %{
+          "processed_messages" => state.processed_messages,
+          "arrived_messages" => state.arrived_messages,
+          "last_arrived_message_time" => state.last_arrived_message_time,
+          "repeated_messages" => state.repeated_messages
+        }
+
+        DatabaseEngine.Interface.LProcessData.set(process_key, data)
       end
 
       def start_link(state, opts) do
@@ -288,7 +302,16 @@ defmodule ProcessManager.UnitProcess.GeneralUnitProcess do
         rtn =
           if state.last_10_processed_messages |> Enum.member?(msg.id) do
             Logging.debug("pname: ~p -> message: ~p already processed.", [process_name, msg.id])
-            {:reply, true, state}
+
+            state = %State{
+              state
+              | last_arrived_message_time: Utilities.now(),
+                processed_messages: processed_messages + 1,
+                repeated_messages: state.repeated_messages + 1
+            }
+
+            update_process_stat_data(state)
+            {:noreply, true, state}
           else
             script = ProcessManager.UnitProcess.Identifier.get_script(msg, state)
 
@@ -341,7 +364,8 @@ defmodule ProcessManager.UnitProcess.GeneralUnitProcess do
               callback(state, msg.internal_callback)
             end
 
-            {:noreply, state}
+            update_process_stat_data(state)
+            {:noreply, true, state}
           end
 
         Logging.debug("pname :~p log_event called", [process_name])
@@ -441,7 +465,8 @@ defmodule ProcessManager.UnitProcess.GeneralUnitProcess do
         GenServer.cast(self(), {:process_message, msg})
 
         send(from, ref)
-        new_state = %{state | arrived_messages: state.arrived_messages + 1}
+        new_state = %State{state | arrived_messages: state.arrived_messages + 1}
+        update_process_stat_data(new_state)
         {:noreply, new_state}
       end
 

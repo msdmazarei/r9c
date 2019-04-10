@@ -127,7 +127,8 @@ defmodule DatabaseEngine.Mnesia.DbSetup do
   ############################# LOCAL INMEMORY TABLES #############################
   @local_in_memory_table [
     {LKVTb, [:key, :value]},
-    {LProcess, [:key, :value]}
+    {LProcess, [:key, :value]},
+    {LProcessData, [:key, :value]}
   ]
 
   def create_local_in_memory_table do
