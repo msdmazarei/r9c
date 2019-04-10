@@ -6,6 +6,8 @@ defmodule OnlineChargingSystem.Servers.Diameter.ConnectedClientProcess.ConvertBy
   @processed_bytes "processed_bytes"
   @generated_packets "generated_packets"
   @bytes_to_struct_time_ms "bytes_to_struct_time_ms"
+  @bytes_to_struct_time_ms_detection_part "bytes_to_struct_time_ms_detection_part"
+  @bytes_to_struct_time_ms_mnesia_part "bytes_to_struct_time_ms_mnesia_part"
 
   require Logger
   require Utilities.Logging
@@ -42,11 +44,17 @@ defmodule OnlineChargingSystem.Servers.Diameter.ConnectedClientProcess.ConvertBy
 
   def convertBytesToStruct(mnesia_buffer_key, mnesia_packets_key) do
     in_buf = LKV.get(mnesia_buffer_key) || <<>>
+
+    st_detection = Utilities.now()
     {dia_packets, rest_buf} = detect_diameter_packet(in_buf)
+    du_detection = Utilities.now() - st_detection
+
     packets_in_count = dia_packets |> length
 
     if packets_in_count > 0 do
       Logging.debug("dia_packets are arrived. count:~p", [packets_in_count])
+
+      st_mnesia = Utilities.now()
 
       r =
         :mnesia.transaction(fn ->
@@ -67,18 +75,20 @@ defmodule OnlineChargingSystem.Servers.Diameter.ConnectedClientProcess.ConvertBy
           LKV.set(mnesia_packets_key, new_packets)
         end)
 
+      du_mnesia = Utilities.now() - st_mnesia
+
       case r do
         {:atomic, _} ->
           bytes_processes = byte_size(in_buf) - byte_size(rest_buf)
           generated_packets = length(dia_packets)
-          {bytes_processes, generated_packets}
+          {{bytes_processes, generated_packets}, du_detection, du_mnesia}
 
         {:aborted, reason} ->
           Logging.error("problem in mnesia: ~p", [reason])
           {:terminate, reason}
       end
     else
-      {0, 0}
+      {{0, 0}, 0, 0}
     end
   end
 
@@ -91,6 +101,9 @@ defmodule OnlineChargingSystem.Servers.Diameter.ConnectedClientProcess.ConvertBy
         }
       ) do
     bytes_to_struct_time_ms = state[@bytes_to_struct_time_ms] || 0
+    bytes_to_struct_time_ms_detection_part = state[@bytes_to_struct_time_ms_detection_part] || 0
+
+    bytes_to_struct_time_ms_mnesia_part = state[@bytes_to_struct_time_ms_mnesia_part] || 0
 
     {continue, state} =
       receive do
@@ -103,7 +116,10 @@ defmodule OnlineChargingSystem.Servers.Diameter.ConnectedClientProcess.ConvertBy
                  %{
                    @processed_bytes => processed_bytes,
                    @generated_packets => generated_packets,
-                   @bytes_to_struct_time_ms => bytes_to_struct_time_ms
+                   @bytes_to_struct_time_ms => bytes_to_struct_time_ms,
+                   @bytes_to_struct_time_ms_mnesia_part => bytes_to_struct_time_ms_mnesia_part,
+                   @bytes_to_struct_time_ms_detection_part =>
+                     bytes_to_struct_time_ms_detection_part
                  }}
               )
 
@@ -121,7 +137,9 @@ defmodule OnlineChargingSystem.Servers.Diameter.ConnectedClientProcess.ConvertBy
               state = state |> Map.put(@terminate_reason, reason)
               {false, state}
 
-            {pbys, gpkts} when is_number(pbys) ->
+            {{pbys, gpkts}, du_bytes_to_struct_time_ms_detection_part,
+             du_bytes_to_struct_time_ms_mnesia_part}
+            when is_number(pbys) ->
               state =
                 if pbys == 0 do
                   :timer.sleep(20)
@@ -133,6 +151,15 @@ defmodule OnlineChargingSystem.Servers.Diameter.ConnectedClientProcess.ConvertBy
                   |> Map.put(@processed_bytes, (processed_bytes || 0) + pbys)
                   |> Map.put(@generated_packets, (generated_packets || 0) + gpkts)
                   |> Map.put(@bytes_to_struct_time_ms, bytes_to_struct_time_ms + du_conversion)
+                  |> Map.put(
+                    @bytes_to_struct_time_ms_detection_part,
+                    bytes_to_struct_time_ms_detection_part +
+                      du_bytes_to_struct_time_ms_detection_part
+                  )
+                  |> Map.put(
+                    @bytes_to_struct_time_ms_mnesia_part,
+                    bytes_to_struct_time_ms_mnesia_part + du_bytes_to_struct_time_ms_mnesia_part
+                  )
                 end
 
               {true, state}

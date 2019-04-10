@@ -285,13 +285,15 @@ defmodule OnlineChargingSystem.Servers.Diameter.TcpServer do
       SRB: Socket Read Byte
       SRT: Socket Read Time
 
-      ~n~nTCPServer([SRB:~p, SRT:~p] [PIN:~p P_B2S_T:~p PPT:~p]) ---> [A:(~p)] Dispatcher[processed:[P:(~p)] REQU:(~p) DRP:(~p)] [SD:(~p)] -----> [A:(~p), P:(~p)] Processes~n
+      ~n~nTCPServer([SRB:~p, SRT:~p] [PIN:~p P_B2S_T:~p (D:~p, M:~p) PPT:~p]) ---> [A:(~p)] Dispatcher[processed:[P:(~p)] REQU:(~p) DRP:(~p)] [SD:(~p)] -----> [A:(~p), P:(~p)] Processes~n
       """,
       [
         first_client["received_bytes"],
         first_client["receive_byte_time_ms"],
         first_client["generated_packets"],
         first_client["bytes_to_struct_time_ms"],
+        first_client["bytes_to_struct_time_ms_detection_part"],
+        first_client["bytes_to_struct_time_ms_mnesia_part"],
         first_client["total_processing_packet_time"],
 
         t2r["diameter_queue"]["arrived"],
