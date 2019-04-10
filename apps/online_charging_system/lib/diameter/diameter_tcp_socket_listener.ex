@@ -273,11 +273,26 @@ defmodule OnlineChargingSystem.Servers.Diameter.TcpServer do
       |> Enum.map(fn x ->
         Task.await(x)
       end)
-
+      first_client = case t1r["per_client"]  do
+        [] -> %{}
+        v -> hd(v)
+      end
     :io.fwrite(
-      " ~n~nTCPServer(~p) ---> [A:(~p)] Dispatcher[processed:[P:(~p)] REQU:(~p) DRP:(~p)] [SD:(~p)] -----> [A:(~p), P:(~p)] Processes~n",
+      """
+      PPT: Packet Processing Time ( create dia struct and push it)
+      P_B2S_T: detect dia packets and push to mnesia time
+      PIN: Total IN PACKET
+      SRB: Socket Read Byte
+      SRT: Socket Read Time
+
+      ~n~nTCPServer([SRB:~p, SRT:~p] [PIN:~p P_B2S_T:~p PPT:~p]) ---> [A:(~p)] Dispatcher[processed:[P:(~p)] REQU:(~p) DRP:(~p)] [SD:(~p)] -----> [A:(~p), P:(~p)] Processes~n
+      """,
       [
-        t1r["in"],
+        first_client["received_bytes"],
+        first_client["receive_byte_time_ms"],
+        first_client["generated_packets"],
+        first_client["bytes_to_struct_time_ms"],
+        first_client["total_processing_packet_time"],
 
         t2r["diameter_queue"]["arrived"],
         t2r["diameter_queue"]["processed"],

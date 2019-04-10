@@ -3,6 +3,7 @@ defmodule OnlineChargingSystem.Servers.Diameter.ConnectedClientProcess.ProcessIn
   @master_pid "master_pid"
   @terminate_reason "terminate_reason"
   @processed_packets "processed_packets"
+  @total_processing_packet_time "total_processing_packet_time"
   @droped_packets "droped_packets"
   @requeued_packets "requeued_packets"
 
@@ -147,7 +148,7 @@ defmodule OnlineChargingSystem.Servers.Diameter.ConnectedClientProcess.ProcessIn
           current_input_packets = LKV.get_for_update(mnesia_packets_key) || []
           clen = current_input_packets |> length
           olen = input_packets |> length
-          Logging.debug("clen:~p olen:~p",[clen, olen])
+          Logging.debug("clen:~p olen:~p", [clen, olen])
 
           new_input_packets =
             if clen > olen do
@@ -188,6 +189,8 @@ defmodule OnlineChargingSystem.Servers.Diameter.ConnectedClientProcess.ProcessIn
           @per_q_success_failuar_map => per_q_success_failuar_map
         }
       ) do
+    total_processing_packet_time = state[@total_processing_packet_time] || 0
+
     {continue, state} =
       receive do
         income_msg ->
@@ -200,7 +203,8 @@ defmodule OnlineChargingSystem.Servers.Diameter.ConnectedClientProcess.ProcessIn
                    @processed_packets => processed_packets,
                    @droped_packets => droped_packets,
                    @requeued_packets => requeued_packets,
-                   @per_q_success_failuar_map => per_q_success_failuar_map
+                   @per_q_success_failuar_map => per_q_success_failuar_map,
+                   @total_processing_packet_time => total_processing_packet_time
                  }}
               )
 
@@ -211,6 +215,8 @@ defmodule OnlineChargingSystem.Servers.Diameter.ConnectedClientProcess.ProcessIn
           end
       after
         0 ->
+          time_start_process_in_packets = Utilities.now()
+
           case process_in_packets(
                  mnesia_packets_key,
                  client_config,
@@ -255,10 +261,16 @@ defmodule OnlineChargingSystem.Servers.Diameter.ConnectedClientProcess.ProcessIn
                         state |> Map.put(@per_q_success_failuar_map, new_v)
                     end
 
+                  du_start_process_in_packets = Utilities.now() - time_start_process_in_packets
+
                   state
                   |> Map.put(@processed_packets, (processed_packets || 0) + pp)
                   |> Map.put(@droped_packets, (droped_packets || 0) + dp)
                   |> Map.put(@requeued_packets, (requeued_packets || 0) + rp)
+                  |> Map.put(
+                    @total_processing_packet_time,
+                    (total_processing_packet_time || 0) + du_start_process_in_packets
+                  )
                 end
 
               {true, state}

@@ -2,6 +2,7 @@ defmodule Networking.TcpReaderToMnesiaBuffer do
   @socket "socket"
   @mnesia_buffer_key "mnesia_buffer_key"
   @received_bytes "received_bytes"
+  @receive_byte_time_ms "receive_byte_time_ms"
   @master_pid "master_pid"
   @terminate_reason "terminate_reason"
 
@@ -51,6 +52,7 @@ defmodule Networking.TcpReaderToMnesiaBuffer do
         }
       ) do
     received_bytes = received_bytes || 0
+    receive_byte_time_ms = state[@receive_byte_time_ms] || 0
 
     {continue, state} =
       receive do
@@ -58,11 +60,19 @@ defmodule Networking.TcpReaderToMnesiaBuffer do
           {continue, state} =
             case income_msg do
               {sender, back_reference, :stats} ->
-                send(sender, {back_reference, %{@received_bytes => received_bytes}})
+                send(
+                  sender,
+                  {back_reference,
+                   %{
+                     @received_bytes => received_bytes,
+                     @receive_byte_time_ms => receive_byte_time_ms
+                   }}
+                )
+
                 {true, state}
 
               {:EXIT, reason} ->
-                Logging.debug("Exit Received. cause of: ~p",[reason])
+                Logging.debug("Exit Received. cause of: ~p", [reason])
                 state |> Map.put(@terminate_reason, {:EXIT, reason})
                 {false, state}
 
@@ -74,6 +84,8 @@ defmodule Networking.TcpReaderToMnesiaBuffer do
           # code
       after
         0 ->
+          st_read = Utilities.now()
+
           case read_from_tcp_socket(socket, state) do
             {:terminate, reason} ->
               state = state |> Map.put(@terminate_reason, reason)
@@ -85,7 +97,11 @@ defmodule Networking.TcpReaderToMnesiaBuffer do
                   :timer.sleep(20)
                   state
                 else
-                  state |> Map.put(@received_bytes, received_bytes + n)
+                  du_read = Utilities.now() - st_read
+
+                  state
+                  |> Map.put(@received_bytes, received_bytes + n)
+                  |> Map.put(@receive_byte_time_ms, du_read + receive_byte_time_ms)
                 end
 
               {true, state}

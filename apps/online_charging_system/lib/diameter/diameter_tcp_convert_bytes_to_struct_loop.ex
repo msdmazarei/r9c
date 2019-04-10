@@ -5,6 +5,7 @@ defmodule OnlineChargingSystem.Servers.Diameter.ConnectedClientProcess.ConvertBy
   @terminate_reason "terminate_reason"
   @processed_bytes "processed_bytes"
   @generated_packets "generated_packets"
+  @bytes_to_struct_time_ms "bytes_to_struct_time_ms"
 
   require Logger
   require Utilities.Logging
@@ -89,6 +90,8 @@ defmodule OnlineChargingSystem.Servers.Diameter.ConnectedClientProcess.ConvertBy
           @generated_packets => generated_packets
         }
       ) do
+    bytes_to_struct_time_ms = state[@bytes_to_struct_time_ms] || 0
+
     {continue, state} =
       receive do
         income_msg ->
@@ -97,7 +100,11 @@ defmodule OnlineChargingSystem.Servers.Diameter.ConnectedClientProcess.ConvertBy
               send(
                 sender,
                 {back_reference,
-                 %{@processed_bytes => processed_bytes, @generated_packets => generated_packets}}
+                 %{
+                   @processed_bytes => processed_bytes,
+                   @generated_packets => generated_packets,
+                   @bytes_to_struct_time_ms => bytes_to_struct_time_ms
+                 }}
               )
 
               {true, state}
@@ -107,6 +114,8 @@ defmodule OnlineChargingSystem.Servers.Diameter.ConnectedClientProcess.ConvertBy
           end
       after
         0 ->
+          st_conversion = Utilities.now()
+
           case convertBytesToStruct(mnesia_buffer_key, mnesia_packets_key) do
             {:terminate, reason} ->
               state = state |> Map.put(@terminate_reason, reason)
@@ -118,9 +127,12 @@ defmodule OnlineChargingSystem.Servers.Diameter.ConnectedClientProcess.ConvertBy
                   :timer.sleep(20)
                   state
                 else
+                  du_conversion = Utilities.now() - st_conversion
+
                   state
                   |> Map.put(@processed_bytes, (processed_bytes || 0) + pbys)
                   |> Map.put(@generated_packets, (generated_packets || 0) + gpkts)
+                  |> Map.put(@bytes_to_struct_time_ms, bytes_to_struct_time_ms + du_conversion)
                 end
 
               {true, state}
