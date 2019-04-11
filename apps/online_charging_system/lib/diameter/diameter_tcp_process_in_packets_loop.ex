@@ -58,6 +58,55 @@ defmodule OnlineChargingSystem.Servers.Diameter.ConnectedClientProcess.ProcessIn
     end
   end
 
+  def parse_bins(
+        input_packets,
+        client_config,
+        client_address,
+        client_ip,
+        client_port,
+        pname,
+        output_buffer_count
+      ) do
+    now_v = Utilities.now()
+    base_uuid = UUID.uuid4()
+
+    dia_structs_to_enqueue =
+      input_packets
+      |> Enum.with_index()
+      |> Enum.map(fn {x, indx} ->
+        qn = get_queue_name_for_dia_packet(client_config, x, client_address)
+        item_id = "#{base_uuid}_#{indx}"
+
+        if qn != nil do
+          Logging.debug("enqueue packet to q:~p", [qn])
+
+          diameter_struct = %DatabaseEngine.Models.DiameterPacket{
+            id: item_id,
+            client_address: client_ip,
+            client_port: client_port,
+            capture_timestamp: now_v,
+            packet_bin: x,
+            parsed_packet: Utilities.Parsers.Diameter.parse_from_bin(x),
+            options: %{},
+            internal_callback: %DatabaseEngine.Models.InternalCallback{
+              module_name: OnlineChargingSystem.Servers.Diameter.ConnectedClientProcess,
+              function_name: :send_response_back_to_client,
+              arguments: [{node(), pname, output_buffer_count}]
+            }
+          }
+
+          {qn, diameter_struct}
+        else
+          # packet will be dropped
+          nil
+        end
+      end)
+
+    to_enq = dia_structs_to_enqueue |> Enum.filter(fn x -> x != nil end)
+
+    {dia_structs_to_enqueue, to_enq}
+  end
+
   def process_in_packets(
         mnesia_packets_key,
         client_config,
@@ -76,37 +125,16 @@ defmodule OnlineChargingSystem.Servers.Diameter.ConnectedClientProcess.ProcessIn
     if length(input_packets) > 0 do
       st_time = Utilities.now()
 
-      dia_structs_to_enqueue =
-        input_packets
-        |> Enum.map(fn x ->
-          qn = get_queue_name_for_dia_packet(client_config, x, client_address)
-
-          if qn != nil do
-            Logging.debug("enqueue packet to q:~p", [qn])
-
-            diameter_struct = %DatabaseEngine.Models.DiameterPacket{
-              id: UUID.uuid1(),
-              client_address: client_ip,
-              client_port: client_port,
-              capture_timestamp: Utilities.now(),
-              packet_bin: x,
-              parsed_packet: Utilities.Parsers.Diameter.parse_from_bin(x),
-              options: %{},
-              internal_callback: %DatabaseEngine.Models.InternalCallback{
-                module_name: OnlineChargingSystem.Servers.Diameter.ConnectedClientProcess,
-                function_name: :send_response_back_to_client,
-                arguments: [{node(), pname, output_buffer_count}]
-              }
-            }
-
-            {qn, diameter_struct}
-          else
-            # packet will be dropped
-            nil
-          end
-        end)
-
-      to_enq = dia_structs_to_enqueue |> Enum.filter(fn x -> x != nil end)
+      {dia_structs_to_enqueue, to_enq} =
+        parse_bins(
+          input_packets,
+          client_config,
+          client_address,
+          client_ip,
+          client_port,
+          pname,
+          output_buffer_count
+        )
 
       du_time = Utilities.now() - st_time
       durations = durations |> Map.put("process_in_packets_to_dia_struct", du_time)
