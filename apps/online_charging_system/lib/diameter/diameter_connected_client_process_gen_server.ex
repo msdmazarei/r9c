@@ -453,37 +453,6 @@ defmodule OnlineChargingSystem.Servers.Diameter.ConnectedClientProcess do
     end
   end
 
-  def detect_diameter_packet(buf, diameters \\ []) do
-    # Logging.debug("called. with buf-len:~p, dia-len:~p", [
-    #   byte_size(buf || <<>>),
-    #   length(diameters)
-    # ])
-
-    case buf do
-      <<_, packet_length::size(24), _::binary>> ->
-        Logging.debug("searching for dia packet with length : ~p", [packet_length])
-
-        case buf do
-          <<diameter_bin_packet::binary-size(packet_length), rest::binary>> ->
-            Logging.debug(
-              "diameter packet found.dia_packet_leng:~p, rest:~p",
-              [byte_size(diameter_bin_packet), byte_size(rest)]
-            )
-
-            all_dias = [diameter_bin_packet | diameters]
-            detect_diameter_packet(rest, all_dias)
-
-          _ ->
-            # Logging.debug("no diameter packet found.")
-            {diameters, buf}
-        end
-
-      _ ->
-        # Logging.debug("no diameter packet found")
-        {diameters, buf}
-    end
-  end
-
   def transactionally_do(func) do
     case :mnesia.is_transaction() do
       true ->

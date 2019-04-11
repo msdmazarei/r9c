@@ -287,7 +287,7 @@ defmodule OnlineChargingSystem.Servers.Diameter.TcpServer do
       PP: processed packets(enqueue)
 
 
-      ~n~nTCPServer([SRB:~p, SRT:~p] [PIN:~p P_B2S_T:~p (D:~p, M:~p) PPT:~p PP:~p]) ---> [A:(~p)] Dispatcher[processed:[P:(~p)] REQU:(~p) DRP:(~p)] [SD:(~p)] -----> [A:(~p), P:(~p)] Processes~n
+      ~n~nTCPServer([SRB:~p, SRT:~p] [PIN:~p P_B2S_T:~p (RM:~p D:~p, M:~p) PPT:~p PP:~p]) ---> [A:(~p)] Dispatcher[processed:[P:(~p)] REQU:(~p) DRP:(~p)] [SD:(~p)] -----> [A:(~p), P:(~p)] Processes~n
       """,
       [
         first_client["received_bytes"],
@@ -295,6 +295,7 @@ defmodule OnlineChargingSystem.Servers.Diameter.TcpServer do
         first_client["generated_packets"],
         first_client["bytes_to_struct_time_ms"],
         first_client["bytes_to_struct_time_ms_detection_part"],
+        first_client["bytes_to_struct_time_ms_retrive_mnesia"],
         first_client["bytes_to_struct_time_ms_mnesia_part"],
         first_client["total_processing_packet_time"],
         first_client["processed_packets"],

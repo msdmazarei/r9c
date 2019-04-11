@@ -29,15 +29,26 @@ defmodule Utilities.Parsers.Diameter do
   require Utilities.Logging
   alias Utilities.Logging
 
+  def detect_diameter_packet_t(buf, diameters, buf_size) when buf_size < 4 do
+    {diameters, buf}
+  end
+
+  def detect_diameter_packet_t(buf, diameters, buf_size) do
+    packet_len = :binary.decode_unsigned(:binary.part(buf, 1, 3))
+
+    if buf_size >= packet_len do
+      pkt = :binary.part(buf, 0, packet_len)
+      rem_buf = :binary.part(buf, packet_len, buf_size - packet_len)
+      detect_diameter_packet_t(rem_buf, [pkt | diameters], buf_size - packet_len)
+    else
+      {diameters, buf}
+    end
+  end
+
   def parse_from_bin(bin) when is_binary(bin) and byte_size(bin) > 4 do
     rtn = %{}
 
     <<version::size(8), message_len::size(24), rest_1::binary>> = bin
-
-    # rtn =
-    #   rtn
-    #   |> Map.put("version", version)
-    #   |> Map.put("message_length", message_len)
 
     if message_len == byte_size(bin) do
       <<request_bit::size(1), proxiable_bit::size(1), error_bit::size(1),
@@ -46,23 +57,6 @@ defmodule Utilities.Parsers.Diameter do
 
       <<application_id::size(32), hop_by_hop_id::size(32), end_to_end_id::size(32),
         rest_3::binary>> = rest_2
-
-      # rtn =
-      #   rtn
-      #   |> Map.put("request_bit", request_bit)
-      #   |> Map.put("proxiable_bit", proxiable_bit)
-      #   |> Map.put("error_bit", error_bit)
-      #   |> Map.put("potentially_retransmit", potentially_retransmit)
-      #   |> Map.put("command_code", command_code)
-
-      # rtn =
-      #   rtn
-      #   |> Map.put("application_id", application_id)
-      #   |> Map.put("hop_by_hop_id", hop_by_hop_id)
-      #   |> Map.put("end_to_end_id", end_to_end_id)
-
-      # rtn = rtn |> Map.put("avps", parse_avps(rest_3, []))
-      # rtn
 
       %Utilities.Parsers.Diameter.DiameterPacket{
         version: version,
@@ -273,5 +267,4 @@ defmodule Utilities.Parsers.Diameter do
     Logging.debug("rtn_value:~p", [str_val])
     str_val
   end
-
 end

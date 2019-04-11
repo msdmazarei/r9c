@@ -166,6 +166,28 @@ defmodule OnlineChargingSystem.Diameter.LoadClient do
     {ack_str, dia_pkt |> Utilities.Parsers.Diameter.serialize_to_bin()}
   end
 
+  def detect_diameter_packet_t(buf, diameters, buf_size) when buf_size < 4 do
+    {diameters, buf}
+  end
+
+  def detect_diameter_packet_t(buf, diameters, buf_size) do
+    packet_len = :binary.decode_unsigned(:binary.part(buf, 1, 3))
+
+    # :io.fwrite("buf_len:~p packet_len:~p remains:~p~n", [
+    #   buf_size,
+    #   packet_len,
+    #   buf_size - packet_len
+    # ])
+
+    if buf_size >= packet_len do
+      pkt = :binary.part(buf, 0, packet_len)
+      rem_buf = :binary.part(buf, packet_len, buf_size - packet_len)
+      detect_diameter_packet_t(rem_buf, [pkt | diameters], buf_size - packet_len)
+    else
+      {diameters, buf}
+    end
+  end
+
   def detect_diameter_packet(buf, diameters \\ []) do
     # Logging.debug("called. with buf-len:~p, dia-len:~p", [
     #   byte_size(buf || <<>>),

@@ -6,6 +6,7 @@ defmodule OnlineChargingSystem.Servers.Diameter.ConnectedClientProcess.ConvertBy
   @processed_bytes "processed_bytes"
   @generated_packets "generated_packets"
   @bytes_to_struct_time_ms "bytes_to_struct_time_ms"
+  @bytes_to_struct_time_ms_retrive_mnesia "bytes_to_struct_time_ms_retrive_mnesia"
   @bytes_to_struct_time_ms_detection_part "bytes_to_struct_time_ms_detection_part"
   @bytes_to_struct_time_ms_mnesia_part "bytes_to_struct_time_ms_mnesia_part"
 
@@ -18,52 +19,16 @@ defmodule OnlineChargingSystem.Servers.Diameter.ConnectedClientProcess.ConvertBy
 
   def detect_diameter_packet(buf, diameters \\ []) do
     # rewritten with 151x faster
-    detect_diameter_packet_t(buf, diameters, byte_size(buf))
-    # case buf do
-    #   <<_, packet_length::size(24), _::binary>> ->
-    #     Logging.debug("searching for dia packet with length : ~p", [packet_length])
-
-    #     case buf do
-    #       <<diameter_bin_packet::binary-size(packet_length), rest::binary>> ->
-    #         Logging.debug(
-    #           "diameter packet found.dia_packet_leng:~p, rest:~p",
-    #           [byte_size(diameter_bin_packet), byte_size(rest)]
-    #         )
-
-    #         all_dias = [diameter_bin_packet | diameters]
-    #         detect_diameter_packet(rest, all_dias)
-
-    #       _ ->
-    #         # Logging.debug("no diameter packet found.")
-    #         {diameters, buf}
-    #     end
-
-    #   _ ->
-    #     # Logging.debug("no diameter packet found")
-    #     {diameters, buf}
-    # end
-  end
-
-  def detect_diameter_packet_t(buf, diameters, buf_size) when buf_size < 4 do
-    {diameters, buf}
-  end
-
-  def detect_diameter_packet_t(buf, diameters, buf_size) do
-    packet_len = :binary.decode_unsigned(:binary.part(buf, 1, 3))
-
-    if buf_size >= packet_len do
-      pkt = :binary.part(buf, 0, packet_len)
-      rem_buf = :binary.part(buf, packet_len, buf_size - packet_len)
-      detect_diameter_packet_t(rem_buf, [pkt | diameters], buf_size - packet_len)
-    else
-      {diameters, buf}
-    end
+    Utilities.Parsers.Diameter.detect_diameter_packet_t(buf, diameters, byte_size(buf))
   end
 
   def convertBytesToStruct(mnesia_buffer_key, mnesia_packets_key) do
+    st_mnesia_retrive_time = Utilities.now()
+    in_buf = LKV.get(mnesia_buffer_key) || <<>>
+    du_mnesia_retrive_time = Utilities.now() - st_mnesia_retrive_time
+
     st_detection = Utilities.now()
 
-    in_buf = LKV.get(mnesia_buffer_key) || <<>>
     {dia_packets, rest_buf} = detect_diameter_packet(in_buf)
     packets_in_count = dia_packets |> length
 
@@ -99,14 +64,14 @@ defmodule OnlineChargingSystem.Servers.Diameter.ConnectedClientProcess.ConvertBy
         {:atomic, _} ->
           bytes_processes = byte_size(in_buf) - byte_size(rest_buf)
           generated_packets = length(dia_packets)
-          {{bytes_processes, generated_packets}, du_detection, du_mnesia}
+          {{bytes_processes, generated_packets}, du_detection, du_mnesia, du_mnesia_retrive_time}
 
         {:aborted, reason} ->
           Logging.error("problem in mnesia: ~p", [reason])
           {:terminate, reason}
       end
     else
-      {{0, 0}, 0, 0}
+      {{0, 0}, 0, 0, 0}
     end
   end
 
@@ -122,6 +87,7 @@ defmodule OnlineChargingSystem.Servers.Diameter.ConnectedClientProcess.ConvertBy
     bytes_to_struct_time_ms_detection_part = state[@bytes_to_struct_time_ms_detection_part] || 0
 
     bytes_to_struct_time_ms_mnesia_part = state[@bytes_to_struct_time_ms_mnesia_part] || 0
+    bytes_to_struct_time_ms_retrive_mnesia = state[@bytes_to_struct_time_ms_retrive_mnesia] || 0
 
     {continue, state} =
       receive do
@@ -137,7 +103,9 @@ defmodule OnlineChargingSystem.Servers.Diameter.ConnectedClientProcess.ConvertBy
                    @bytes_to_struct_time_ms => bytes_to_struct_time_ms,
                    @bytes_to_struct_time_ms_mnesia_part => bytes_to_struct_time_ms_mnesia_part,
                    @bytes_to_struct_time_ms_detection_part =>
-                     bytes_to_struct_time_ms_detection_part
+                     bytes_to_struct_time_ms_detection_part,
+                   @bytes_to_struct_time_ms_retrive_mnesia =>
+                     bytes_to_struct_time_ms_retrive_mnesia
                  }}
               )
 
@@ -157,11 +125,11 @@ defmodule OnlineChargingSystem.Servers.Diameter.ConnectedClientProcess.ConvertBy
               state = state |> Map.put(@terminate_reason, reason)
               {false, state}
 
-            {{0, _}, _, _} ->
+            {{0, _}, _, _, _} ->
               {true, state}
 
             {{pbys, gpkts}, du_bytes_to_struct_time_ms_detection_part,
-             du_bytes_to_struct_time_ms_mnesia_part}
+             du_bytes_to_struct_time_ms_mnesia_part, du_bytes_to_struct_time_ms_retrive_mnesia}
             when is_number(pbys) and pbys > 0 ->
               new_state =
                 state
@@ -176,6 +144,11 @@ defmodule OnlineChargingSystem.Servers.Diameter.ConnectedClientProcess.ConvertBy
                 |> Map.put(
                   @bytes_to_struct_time_ms_mnesia_part,
                   bytes_to_struct_time_ms_mnesia_part + du_bytes_to_struct_time_ms_mnesia_part
+                )
+                |> Map.put(
+                  @bytes_to_struct_time_ms_retrive_mnesia,
+                  bytes_to_struct_time_ms_retrive_mnesia +
+                    du_bytes_to_struct_time_ms_retrive_mnesia
                 )
 
               {true, new_state}
