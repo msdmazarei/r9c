@@ -273,10 +273,16 @@ defmodule OnlineChargingSystem.Servers.Diameter.TcpServer do
       |> Enum.map(fn x ->
         Task.await(x)
       end)
-      first_client = case t1r["per_client"]  do
+
+    first_client =
+      case t1r["per_client"] do
         [] -> %{}
         v -> hd(v)
       end
+
+    packet_process_durations = first_client["packet_process_durations"] || %{}
+
+
     :io.fwrite(
       """
       PPT: Packet Processing Time ( create dia struct and push it)
@@ -286,8 +292,23 @@ defmodule OnlineChargingSystem.Servers.Diameter.TcpServer do
       SRT: Socket Read Time
       PP: processed packets(enqueue)
 
+      MRT: Mnesia Read Time
+      2DT: Conevrt To Dia Packet Time
+      GDT: Grouping Dia packets Time
+      SCT: stat cacl Time
+      ENT: Enqueue Time
+      MWT: Mnesia Write Time
 
-      ~n~nTCPServer([SRB:~p, SRT:~p] [PIN:~p P_B2S_T:~p (RM:~p D:~p, M:~p) PPT:~p PP:~p]) ---> [A:(~p)] Dispatcher[processed:[P:(~p)] REQU:(~p) DRP:(~p)] [SD:(~p)] -----> [A:(~p), P:(~p)] Processes~n
+
+      ~n~nTCPServer(
+                    [SRB:~p, SRT:~p]
+                    [
+                      PIN:~p
+                        P_B2S_T:~p (RM:~p D:~p, M:~p)
+                        PPT:~p (MRT:~p 2DT:~p GDT:~p SCT:~p ENT:~p MWT:~p)
+                      PP:~p
+                    ]
+                    )  ---> [A:(~p)] Dispatcher[processed:[P:(~p)] REQU:(~p) DRP:(~p)] [SD:(~p)] -----> [A:(~p), P:(~p)] Processes~n
       """,
       [
         first_client["received_bytes"],
@@ -298,14 +319,19 @@ defmodule OnlineChargingSystem.Servers.Diameter.TcpServer do
         first_client["bytes_to_struct_time_ms_retrive_mnesia"],
         first_client["bytes_to_struct_time_ms_mnesia_part"],
         first_client["total_processing_packet_time"],
-        first_client["processed_packets"],
+        packet_process_durations["process_in_packets_mnesia_read"],
+        packet_process_durations["process_in_packets_to_dia_struct"],
+        packet_process_durations["process_in_packets_grouping"],
+        packet_process_durations["process_in_packets_stats_calc"],
+        packet_process_durations["process_in_packets_enqueuing"],
+        packet_process_durations["process_in_packets_mnesia_write"],
 
+        first_client["processed_packets"],
         t2r["diameter_queue"]["arrived"],
         t2r["diameter_queue"]["processed"],
         t2r["diameter_queue"]["need_to_requeue_count"],
         t2r["diameter_queue"]["dropped_messages_cause_of_retry"],
         t2r["diameter_queue"]["successfully_delivered_to_uprocess"],
-
         t3r["total"]["arrived_messages"],
         t3r["total"]["processed_messages"]
       ]

@@ -320,6 +320,17 @@ defmodule Utilities do
     |> List.to_tuple()
   end
 
+
+  def sum_up_two_map(map, target_map) when is_map(map) and is_map(target_map) do
+    map|> Map.to_list|>Enum.reduce(
+      target_map, fn {k,v}, acc ->
+        old_v = acc[k] || 0
+        new_v = old_v + v
+        acc |> Map.put(k, new_v)
+      end
+    )
+  end
+
   def iter_over_all_iterables(iterable, func, first_apply_func) when is_map(iterable) do
     iterable |> Map.to_list() |> iter_over_all_iterables(func, first_apply_func) |> Map.new()
   end

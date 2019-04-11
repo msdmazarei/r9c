@@ -14,6 +14,7 @@ defmodule OnlineChargingSystem.Servers.Diameter.ConnectedClientProcess.ProcessIn
   @pname "pname"
   @output_buffer_count "output_buffer_count"
   @per_q_success_failuar_map "per_q_success_failuar_map"
+  @durations "packet_process_durations"
 
   require Logger
   require Utilities.Logging
@@ -66,9 +67,15 @@ defmodule OnlineChargingSystem.Servers.Diameter.ConnectedClientProcess.ProcessIn
         pname,
         output_buffer_count
       ) do
+    durations = %{}
+    st_time = Utilities.now()
     input_packets = LKV.get(mnesia_packets_key) || []
+    du_time = Utilities.now() - st_time
+    durations = durations |> Map.put("process_in_packets_mnesia_read", du_time)
 
     if length(input_packets) > 0 do
+      st_time = Utilities.now()
+
       dia_structs_to_enqueue =
         input_packets
         |> Enum.map(fn x ->
@@ -101,9 +108,18 @@ defmodule OnlineChargingSystem.Servers.Diameter.ConnectedClientProcess.ProcessIn
 
       to_enq = dia_structs_to_enqueue |> Enum.filter(fn x -> x != nil end)
 
+      du_time = Utilities.now() - st_time
+      durations = durations |> Map.put("process_in_packets_to_dia_struct", du_time)
+
+      st_time = Utilities.now()
+
       grouped_by_qname = to_enq |> Enum.group_by(fn {q, _} -> q end, fn {_, v} -> v end)
 
+      du_time = Utilities.now() - st_time
+      durations = durations |> Map.put("process_in_packets_grouping", du_time)
       # we use async task because may we need multiple qname with arrived packets
+
+      st_time = Utilities.now()
 
       tasks =
         grouped_by_qname
@@ -119,6 +135,10 @@ defmodule OnlineChargingSystem.Servers.Diameter.ConnectedClientProcess.ProcessIn
       enqueue_task_result_group_by_qname = tasks |> Enum.map(fn x -> Task.await(x) end)
 
       Logging.debug("All response from enqueuing arrived.")
+      du_time = Utilities.now() - st_time
+      durations = durations |> Map.put("process_in_packets_enqueuing", du_time)
+
+      st_time = Utilities.now()
 
       per_q_success_failuar_map =
         enqueue_task_result_group_by_qname
@@ -140,7 +160,10 @@ defmodule OnlineChargingSystem.Servers.Diameter.ConnectedClientProcess.ProcessIn
 
       dropped_count = dropped_cause_of_no_qname + length(to_enq) - succ_enq_count
 
+      du_time = Utilities.now() - st_time
+      durations = durations |> Map.put("process_in_packets_stats_calc", du_time)
       # carefully think about re_enq
+      st_time = Utilities.now()
       re_enq = []
 
       r =
@@ -167,10 +190,12 @@ defmodule OnlineChargingSystem.Servers.Diameter.ConnectedClientProcess.ProcessIn
           {:terminate, reason}
 
         {:atomic, _} ->
-          {succ_enq_count, dropped_count, length(re_enq), per_q_success_failuar_map}
+          du_time = Utilities.now() - st_time
+          durations = durations |> Map.put("process_in_packets_mnesia_write", du_time)
+          {succ_enq_count, dropped_count, length(re_enq), per_q_success_failuar_map, durations}
       end
     else
-      {0, 0, 0, %{}}
+      {0, 0, 0, %{}, durations}
     end
   end
 
@@ -191,6 +216,8 @@ defmodule OnlineChargingSystem.Servers.Diameter.ConnectedClientProcess.ProcessIn
       ) do
     total_processing_packet_time = state[@total_processing_packet_time] || 0
 
+    durations = state[@durations] || %{}
+
     {continue, state} =
       receive do
         income_msg ->
@@ -204,7 +231,8 @@ defmodule OnlineChargingSystem.Servers.Diameter.ConnectedClientProcess.ProcessIn
                    @droped_packets => droped_packets,
                    @requeued_packets => requeued_packets,
                    @per_q_success_failuar_map => per_q_success_failuar_map,
-                   @total_processing_packet_time => total_processing_packet_time
+                   @total_processing_packet_time => total_processing_packet_time,
+                   @durations => durations
                  }}
               )
 
@@ -230,7 +258,7 @@ defmodule OnlineChargingSystem.Servers.Diameter.ConnectedClientProcess.ProcessIn
               state = state |> Map.put(@terminate_reason, reason)
               {false, state}
 
-            {pp, dp, rp, per_q_success_failuar_map} when is_number(pp) ->
+            {pp, dp, rp, per_q_success_failuar_map, durations_map} when is_number(pp) ->
               state =
                 if pp == 0 and dp == 0 and rp == 0 do
                   :timer.sleep(20)
@@ -273,6 +301,8 @@ defmodule OnlineChargingSystem.Servers.Diameter.ConnectedClientProcess.ProcessIn
                   )
                 end
 
+              durations = Utilities.sum_up_two_map(durations_map, durations)
+              state = state |> Map.put(@durations, durations)
               {true, state}
           end
       end
