@@ -281,7 +281,7 @@ defmodule OnlineChargingSystem.Servers.Diameter.TcpServer do
       end
 
     packet_process_durations = first_client["packet_process_durations"] || %{}
-
+    enqueue_duration = packet_process_durations["q_total_duration"] || %{}
 
     :io.fwrite(
       """
@@ -299,13 +299,16 @@ defmodule OnlineChargingSystem.Servers.Diameter.TcpServer do
       ENT: Enqueue Time
       MWT: Mnesia Write Time
 
+      S: serialization
+      AGB: Agg bin to best fit to kafka message size
+      KP: kafka push
 
       ~n~nTCPServer(
                     [SRB:~p, SRT:~p]
                     [
                       PIN:~p
                         P_B2S_T:~p (RM:~p D:~p, M:~p)
-                        PPT:~p (MRT:~p 2DT:~p GDT:~p SCT:~p ENT:~p MWT:~p)
+                        PPT:~p (MRT:~p 2DT:~p GDT:~p SCT:~p ENT:~p(S:~p AGB:~p KP:~p ) MWT:~p)
                       PP:~p
                     ]
                     )  ---> [A:(~p)] Dispatcher[processed:[P:(~p)] REQU:(~p) DRP:(~p)] [SD:(~p)] -----> [A:(~p), P:(~p)] Processes~n
@@ -324,8 +327,10 @@ defmodule OnlineChargingSystem.Servers.Diameter.TcpServer do
         packet_process_durations["process_in_packets_grouping"],
         packet_process_durations["process_in_packets_stats_calc"],
         packet_process_durations["process_in_packets_enqueuing"],
+        enqueue_duration["serialization"],
+        enqueue_duration["agg_binaries"],
+        enqueue_duration["kafka_push"],
         packet_process_durations["process_in_packets_mnesia_write"],
-
         first_client["processed_packets"],
         t2r["diameter_queue"]["arrived"],
         t2r["diameter_queue"]["processed"],

@@ -320,13 +320,27 @@ defmodule Utilities do
     |> List.to_tuple()
   end
 
-
   def sum_up_two_map(map, target_map) when is_map(map) and is_map(target_map) do
-    map|> Map.to_list|>Enum.reduce(
-      target_map, fn {k,v}, acc ->
-        old_v = acc[k] || 0
-        new_v = old_v + v
-        acc |> Map.put(k, new_v)
+    map
+    |> Map.to_list()
+    |> Enum.reduce(
+      target_map,
+      fn {k, v}, acc ->
+        if is_number(v) do
+        end
+
+        case v do
+          _ when is_number(v) ->
+            old_v = acc[k] || 0
+            new_v = old_v + v
+            acc |> Map.put(k, new_v)
+
+          _ when is_map(v) ->
+            acc |> Map.put(k, sum_up_two_map(v, acc[k] || %{}))
+
+          _ ->
+            acc |> Map.put(k, v)
+        end
       end
     )
   end

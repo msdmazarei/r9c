@@ -160,7 +160,26 @@ defmodule OnlineChargingSystem.Servers.Diameter.ConnectedClientProcess.ProcessIn
         end)
 
       Logging.debug("awaiting")
-      enqueue_task_result_group_by_qname = tasks |> Enum.map(fn x -> Task.await(x) end)
+      enqueue_task_result_group_by_qname_duration = tasks |> Enum.map(fn x -> Task.await(x) end)
+
+      enqueue_task_result_group_by_qname =
+        enqueue_task_result_group_by_qname_duration |> Enum.map(fn {q, {l, _}} -> {q, l} end)
+
+      duration_per_q_ =
+        enqueue_task_result_group_by_qname_duration |> Enum.map(fn {q, {_, d}} -> {q, d} end)
+
+      # Logging.info("duration_q;~p", [duration_per_q_])
+      durations = durations |> Map.put("per_q_enq_duration", duration_per_q_)
+
+      # cause all of these are parallel so we should find max
+      total_q_duration =
+        duration_per_q_
+        |> Enum.map(fn {_, d} ->
+          d["total"]
+        end)
+        |> Enum.max_by(fn x -> x["total"] end)
+
+      durations = durations |> Map.put("q_total_duration", total_q_duration)
 
       Logging.debug("All response from enqueuing arrived.")
       du_time = Utilities.now() - st_time
@@ -328,6 +347,8 @@ defmodule OnlineChargingSystem.Servers.Diameter.ConnectedClientProcess.ProcessIn
                     (total_processing_packet_time || 0) + du_start_process_in_packets
                   )
                 end
+
+              # Logging.info("durations_map:~p durations:~p",[durations_map,durations])
 
               durations = Utilities.sum_up_two_map(durations_map, durations)
               state = state |> Map.put(@durations, durations)

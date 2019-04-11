@@ -158,9 +158,13 @@ defmodule DatabaseEngine.DurableQueue do
       |> Enum.map(fn x -> x.partition_id end)
       |> Enum.shuffle()
 
+    durations = %{}
+
     case partitions do
       l when is_list(l) and length(l) > 0 ->
         len_parts = length(l)
+
+        st_time = Utilities.now()
 
         partition_for_items =
           list_of_objects
@@ -174,13 +178,26 @@ defmodule DatabaseEngine.DurableQueue do
         part_obj = Enum.zip(partition_for_items, list_of_objects_with_index)
         map_part_obj = part_obj |> Enum.group_by(fn {p, _} -> p end, fn {_, o} -> o end)
 
+        du_time = Utilities.now() - st_time
+
+        durations = durations |> Map.put("grouping", du_time)
+
         tasks =
           map_part_obj
           |> Map.to_list()
           |> Enum.map(fn {p, objs_list_with_index} ->
             Task.async(fn ->
+              sub_duration = %{}
+
+              st_time = Utilities.now()
+
               serialized_obj_list_with_index =
                 objs_list_with_index |> Enum.map(fn {obj, indx} -> {serialize(obj), indx} end)
+
+              du_time = Utilities.now() - st_time
+              sub_duration = sub_duration |> Map.put("serialization", du_time)
+
+              st_time = Utilities.now()
 
               list_of_list_of_bins_with_index =
                 Utilities.agg_binaries_till_reach_to_size(
@@ -188,6 +205,9 @@ defmodule DatabaseEngine.DurableQueue do
                   fn {b, _} -> byte_size(b) end,
                   @kafka_max_message_size_to_produce
                 )
+
+              du_time = Utilities.now() - st_time
+              sub_duration = sub_duration |> Map.put("agg_binaries", du_time)
 
               result_of_sending_msg =
                 list_of_list_of_bins_with_index
@@ -219,14 +239,35 @@ defmodule DatabaseEngine.DurableQueue do
                   end
                 end)
 
-              result_of_sending_msg |> List.flatten()
+              du_time = Utilities.now() - st_time
+              sub_duration = sub_duration |> Map.put("kafka_push", du_time)
+              rtn_list = result_of_sending_msg |> List.flatten()
+              {rtn_list, {p, sub_duration}}
             end)
           end)
 
-        tasks |> Enum.map(fn t -> Task.await(t) end) |> List.flatten()
+        results = tasks |> Enum.map(fn t -> Task.await(t) end)
+        result_lists = results |> Enum.map(fn {l, _} -> l end)
+        result_part_durations = results |> Enum.map(fn {_, d} -> d end)
+
+        durations = durations |> Map.put("partitions_durations", result_part_durations)
+
+        max_sub_duration =
+          result_part_durations
+          |> Enum.map(fn {_, du} ->
+            sum_all_values = du |> Map.to_list() |> Enum.map(fn {_, v} -> v end) |> Enum.sum()
+            du |> Map.put("total", sum_all_values)
+          end)
+          |> Enum.max_by(fn x -> x["total"] end)
+
+        durations = durations |> Map.put("total", max_sub_duration)
+
+        rtn = result_lists |> List.flatten()
+        {rtn, durations}
 
       _ ->
-        list_of_objects |> Enum.with_index() |> Enum.map(fn _, i -> {i, :nok} end)
+        rtn = list_of_objects |> Enum.with_index() |> Enum.map(fn _, i -> {i, :nok} end)
+        {rtn, durations}
     end
   end
 
@@ -265,8 +306,7 @@ defmodule DatabaseEngine.DurableQueue do
              commit_interval: 5_000,
              commit_threshold: 5_000,
              fetch_options: [
-              max_bytes: 3_000_000
-
+               max_bytes: 3_000_000
              ]
            ]
          ]},
@@ -342,8 +382,8 @@ defmodule DatabaseEngine.DurableQueue do
         |> Map.to_list()
         |> Enum.map(fn {part_no, part_pid} ->
           stat =
-            case DatabaseEngine.Interface.LProcessData.get({"consumer",part_pid}) do
-               m when is_map(m) ->
+            case DatabaseEngine.Interface.LProcessData.get({"consumer", part_pid}) do
+              m when is_map(m) ->
                 %{
                   "arrived" => m["arrived_messages"],
                   "processed" => m["processed_messages"],
@@ -351,7 +391,6 @@ defmodule DatabaseEngine.DurableQueue do
                   "dropped_messages_cause_of_retry" => m["dropped_messages_cause_of_retry"],
                   "need_to_requeue_count" => m["need_to_requeue_count"],
                   "process_creation_time" => m["process_creation_time"],
-                  "process_duration" => m["process_duration"],
                   "send_message_to_process_time" => m["send_message_to_process_time"],
                   "successfully_delivered_to_uprocess" => m["successfully_delivered_to_uprocess"]
                 }
