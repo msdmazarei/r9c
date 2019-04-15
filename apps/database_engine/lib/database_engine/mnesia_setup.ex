@@ -121,7 +121,9 @@ defmodule DatabaseEngine.Mnesia.DbSetup do
        :flag_idx
      ]},
     {EventTb, [:idx, :correlator_idx]},
-    {KVTb, [:key, :value]}
+    {KVTb, [:key, :value]},
+    {SystemConfigTb, [:key, :value]}
+
   ]
 
   ############################# LOCAL INMEMORY TABLES #############################

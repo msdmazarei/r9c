@@ -9,6 +9,12 @@ defmodule ApiserverWeb.RCBaseController do
       require Plug.Conn
       alias Plug.Conn
 
+
+      import Phoenix.Controller
+
+
+
+
       use ApiserverWeb, :controller
       #      plug Plug.Parsers, parsers: [:urlencoded, :json],
       #                         pass: ["text/*"],
@@ -89,6 +95,16 @@ defmodule ApiserverWeb.RCBaseController do
         else
           Logging.debug("schema file does not exists, consider body as corrected one.")
           conn
+        end
+      end
+
+      def send_response(conn, status, json_response) do
+        case json_response do
+          nil ->
+            send_resp(conn, status, "")
+
+          _ ->
+            conn |> put_status(status) |> json(json_response)
         end
       end
     end

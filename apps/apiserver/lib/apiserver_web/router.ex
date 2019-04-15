@@ -30,4 +30,25 @@ defmodule ApiserverWeb.Router do
     delete "/admin/clients/:id/:version", Client.ClientController, :delete
     put "/admin/clients/:id/:version", Client.ClientController, :edit
   end
+
+  scope "/api/admin/nodes", ApiserverWeb.Admin.Settings.Nodes do
+    pipe_through(:api)
+    get "/actives", Controller, :list_active_nodes
+    get "/actives/:nodename", Controller, :list_active_nodes_on_target_node
+    get "/ping/:nodename", Controller, :ping
+    post "/connect/:nodename", Controller, :connect_to_node
+    post "/disconnect/:nodename", Controller, :disconnect_node
+    get "/brief/:nodename", Controller, :node_brief
+    post "/set_cookie", Controller, :set_cookie
+    post "/transfer_modules/:nodename", Controller, :transfer_all_local_modules_to_target_node
+    post "/save_cookie", Controller, :permanently_set_cookie_target_node
+    get "/loaded_modules/:nodename", Controller, :get_all_loaded_modules
+    get "/is_ready_to_run/:nodename", Controller, :check_is_node_proper_to_run_r9c
+    post "/config", Controller, :add_new_node_to_config
+    delete "/config/:nodename", Controller, :del_node_config
+    put "/config", Controller, :edit_node_config
+    get "/config/node/:nodename", Controller, :get_node_config
+    get "/config/_all", Controller, :get_all_nodes_config
+
+  end
 end
