@@ -150,6 +150,7 @@ defmodule DatabaseEngine.Interface.SystemConfig.Node.Repo do
       is_number(model.version)
   end
 
+  @spec list_all_nodes() :: [DatabaseEngine.Interface.SystemConfig.NodeModel.t()]
   def list_all_nodes() do
     nodes = SystemConfig.get("nodes") || []
     nodes |> Enum.map(fn x -> get_node(x) end)

@@ -93,4 +93,34 @@ defmodule Utilities.Conversion do
     bit_size = 8 * bin_length
     <<number::size(bit_size)>>
   end
+
+  def nested_tuple_to_list(list) when is_list(list) do
+    list
+    |> Enum.map(&nested_tuple_to_list/1)
+  end
+
+  def nested_tuple_to_list(tuple) when is_tuple(tuple) do
+    tuple
+    |> Tuple.to_list()
+    |> Enum.map(&nested_tuple_to_list/1)
+  end
+
+  def nested_tuple_to_list(map) when is_map(map) do
+    Enum.reduce(
+      Map.to_list(map),
+      %{},
+      fn {k, v}, acc ->
+        new_v =
+          if is_list(v) or is_map(v) or is_tuple(v) do
+            nested_tuple_to_list(v)
+          else
+            v
+          end
+
+        Map.put(acc, k, new_v)
+      end
+    )
+  end
+
+  def nested_tuple_to_list(x), do: x
 end

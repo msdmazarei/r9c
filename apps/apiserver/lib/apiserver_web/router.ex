@@ -51,4 +51,11 @@ defmodule ApiserverWeb.Router do
     get "/config/_all", Controller, :get_all_nodes_config
 
   end
+
+  scope "/api/admin/mnesia", ApiserverWeb.Admin.Settings.Mnesia do
+    pipe_through(:api)
+
+    get "/status/:nodename", Controller, :get_mnesia_info_of_node
+    get "/:nodename/table/:tbname", Controller, :get_mnesia_table_info_on_node
+  end
 end
