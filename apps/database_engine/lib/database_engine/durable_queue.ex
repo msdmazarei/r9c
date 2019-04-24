@@ -454,6 +454,23 @@ defmodule DatabaseEngine.DurableQueue do
       {qname, parts_stat}
     end)
   end
+
+  def stop_kafka_ex() do
+    Logging.debug("called.")
+    Application.stop(:kafka_ex)
+  end
+
+  def start_kafka_ex() do
+    Logging.debug("called.")
+    all_brokers = DatabaseEngine.Interface.SystemConfig.KafkaBroker.Repo.get_all()
+    all_brokers_hosts = all_brokers |> Enum.map(fn x -> x.host end)
+    brokers = all_brokers_hosts |> Enum.join(",")
+    Logging.debug("brokers:~p", [brokers])
+    Application.put_env(:kafka_ex, :brokers, brokers)
+    r = Application.start(:kafka_ex)
+    Logging.debug("started result:~p", [r])
+    r
+  end
 end
 
 defprotocol DatabaseEngine.DurableQueue.Deserialize do

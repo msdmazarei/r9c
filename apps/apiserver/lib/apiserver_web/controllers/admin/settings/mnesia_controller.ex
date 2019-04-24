@@ -74,4 +74,59 @@ defmodule ApiserverWeb.Admin.Settings.Mnesia.Controller do
 
     conn |> send_response(status, json_response)
   end
+
+  def join_new_node(conn, params) do
+    st_time = Utilities.now()
+    nodename = params["nodename"] |> String.to_atom()
+
+    {status, json_response} =
+      case Utilities.Admin.Mnesia.add_node_to_mnesia_cluster(nodename) do
+        {:ok, _} ->
+          Logging.info("node:~p joined to mnesia", [nodename])
+          {200, ok(st_time, %{"result" => true})}
+
+        {:aborted, reason} ->
+          Logging.info("problem to join node:~p to mnesia.", [nodename])
+          {500, badrpc_result(st_time, reason)}
+
+        e ->
+          Logging.error("unhandled error:~p", [e])
+          {500, %{"error" => "unhandled error"}}
+      end
+
+    conn |> send_response(status, json_response)
+  end
+
+  def del_cluster_node(conn, params) do
+    st_time = Utilities.now()
+    nodename = params["nodename"] |> String.to_atom()
+
+    {status, json_response} =
+      case Utilities.Admin.Mnesia.del_node(nodename) do
+        {:aborted, reason} ->
+          {500, badrpc_result(st_time, reason)}
+
+        {:atomic, :ok} ->
+          {200, ok(st_time, %{})}
+      end
+
+    conn |> send_response(status, json_response)
+  end
+
+  def add_ram_replica_to_table(conn, params) do
+    st_time = Utilities.now()
+    nodename = params["nodename"] |> String.to_atom()
+    table_name = params["tablename"] |> String.to_atom()
+
+    {status, json_response} =
+      case Utilities.Admin.Mnesia.add_ram_replica_node_for_table(nodename, table_name) do
+        {:aborted, reason} ->
+          {500, badrpc_result(st_time, reason)}
+
+        {:atomic, :ok} ->
+          {200, %{}}
+      end
+
+    conn |> send_response(status, json_response)
+  end
 end

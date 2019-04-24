@@ -23,6 +23,41 @@ defmodule Dispatcher.Application do
   end
 
   def start_consumers() do
+    Logging.debug("called.")
+    node_name = :erlang.node() |> to_string
+
+    my_conf = DatabaseEngine.Interface.SystemConfig.Node.Repo.get_node(node_name)
+    Logging.debug("node conf:~p", [my_conf])
+
+    if my_conf do
+      if my_conf.is_dispatcher_node do
+        Logging.debug("I'm Dispatcher Node")
+        all_dispatcher = DatabaseEngine.Interface.SystemConfig.KafkaQueueDispatcher.Repo.get_all()
+
+        my_q_dispatchers =
+          all_dispatcher |> Enum.filter(fn x -> x.dispatcher_node_name == node_name end)
+
+        Logging.debug("my queue dispatchers:~p", [my_q_dispatchers])
+
+        res =
+          my_q_dispatchers
+          |> Enum.map(fn x ->
+            DatabaseEngine.DurableQueue.start_consumer_group(
+              x.q_name,
+              x.consumer_name,
+              Dispatcher.Consumers.InQConsumer
+            )
+          end)
+
+        Enum.zip(my_q_dispatchers, res)
+      else
+        Logging.debug("I'm Not Dispatcher Node")
+        []
+      end
+    end
+  end
+
+  def start_consumers_old() do
     input_queues = Application.get_env(:dispatcher, :input_queues)
     Logging.debug("config for input queues for dispatcher are:~p", [input_queues])
 

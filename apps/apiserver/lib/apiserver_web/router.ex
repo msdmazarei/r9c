@@ -33,6 +33,7 @@ defmodule ApiserverWeb.Router do
 
   scope "/api/admin/nodes", ApiserverWeb.Admin.Settings.Nodes do
     pipe_through(:api)
+    get "/brief_actives", Controller, :brief_actives
     get "/actives", Controller, :list_active_nodes
     get "/actives/:nodename", Controller, :list_active_nodes_on_target_node
     get "/ping/:nodename", Controller, :ping
@@ -49,7 +50,6 @@ defmodule ApiserverWeb.Router do
     put "/config", Controller, :edit_node_config
     get "/config/node/:nodename", Controller, :get_node_config
     get "/config/_all", Controller, :get_all_nodes_config
-
   end
 
   scope "/api/admin/mnesia", ApiserverWeb.Admin.Settings.Mnesia do
@@ -57,5 +57,40 @@ defmodule ApiserverWeb.Router do
 
     get "/status/:nodename", Controller, :get_mnesia_info_of_node
     get "/:nodename/table/:tbname", Controller, :get_mnesia_table_info_on_node
+    post "/cluster/node/:nodename", Controller, :join_new_node
+    delete "/cluster/node/:nodename", Controller, :del_cluster_node
+    post "/cluster/table/:tablename/ram_copy/:nodename", Controller, :add_ram_replica_to_table
+  end
+
+  scope "/api/admin/kafka/runtime", ApiserverWeb.Admin.Settings.Kafka.Runtime do
+    pipe_through(:api)
+
+    post "/stop", Controller, :stop_kafka
+    post "/start", Controller, :start_kafka
+    post "/brokers", Controller, :get_brokers
+    post "/topics", Controller, :get_topics
+    delete "/topics/:topic", Controller, :delete_topic
+    post "/topics/new" , Controller, :create_topic
+  end
+
+  scope "/api/admin/kafka/brokers", ApiserverWeb.Admin.Settings.Kafka.Broker do
+    pipe_through(:api)
+
+    post "/", Controller, :add_new
+    get "/:key", Controller, :get
+    get "/", Controller, :list_all
+    put "/", Controller, :edit
+    delete "/:key", Controller, :del
+
+    get "/run_time/queues", Controller, :list_kafka_queues
+    get "/run_time/dispatchers/stats", Controller, :dispatchers_stat
+  end
+
+  scope "/api/admin/kafka/dispatchers", ApiserverWeb.Admin.Settings.Kafka.Dispatcher do
+    get "/", Controller, :list_all
+    post "/", Controller, :add_new
+    put "/", Controller, :edit
+    delete "/:key", Controller, :del
+    get "/:key", Controller, :get
   end
 end

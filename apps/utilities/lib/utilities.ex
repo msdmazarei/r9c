@@ -320,6 +320,10 @@ defmodule Utilities do
     |> List.to_tuple()
   end
 
+  def to_string(obj) do
+    :io_lib.format("~p", [obj]) |> Utilities.erl_list_to_iex_string()
+  end
+
   def sum_up_two_map(map, target_map) when is_map(map) and is_map(target_map) do
     map
     |> Map.to_list()
@@ -378,6 +382,8 @@ defmodule Utilities do
   end
 
   def func_reomte_async_task(my_pid, my_ref, module, func, arguments) do
+    init_pid = :erlang.whereis(:init)
+    :erlang.process_info(init_pid, :group_leader)
     res = apply(module, func, arguments)
     send(my_pid, {my_ref, res})
   end

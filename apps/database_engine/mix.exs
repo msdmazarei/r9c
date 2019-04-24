@@ -27,7 +27,7 @@ defmodule DatabaseEngine.MixProject do
   defp deps do
     [
       {:utilities, in_umbrella: true},
-      {:kafka_ex, "~> 0.8.3"},
+      {:kafka_ex, "~> 0.10.0"},
       {:couchdb_connector, "~> 0.5.0"}
       # {:dep_from_hexpm, "~> 0.3.0"},
       # {:dep_from_git, git: "https://github.com/elixir-lang/my_dep.git", tag: "0.1.0"},

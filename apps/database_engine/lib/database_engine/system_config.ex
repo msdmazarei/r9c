@@ -116,6 +116,241 @@ defmodule DatabaseEngine.Interface.SystemConfig do
   end
 end
 
+defmodule DatabaseEngine.Interface.SystemConfig.KafkaBroker do
+  defstruct host: "",
+            display_name: "",
+            description: "",
+            version: 0,
+            additional_props: %{}
+end
+
+defmodule DatabaseEngine.Interface.SystemConfig.KafkaBroker.Repo do
+  require DatabaseEngine.Interface.SystemConfig
+  alias DatabaseEngine.Interface.SystemConfig
+  require DatabaseEngine.Interface.SystemConfig.KafkaBroker
+  alias DatabaseEngine.Interface.SystemConfig.KafkaBroker, as: Model
+
+  @spec is_valid_model(DatabaseEngine.Interface.SystemConfig.KafkaBroker.t()) :: boolean()
+  def is_valid_model(model = %Model{}) do
+    is_binary(model.host) and is_binary(model.display_name) and is_binary(model.description) and
+      is_number(model.version) and is_map(model.additional_props)
+  end
+
+  defp all_key() do
+    "kafka_brokers"
+  end
+
+  defp single_key(host) do
+    {"kafka_broker", host}
+  end
+
+  @spec get_all() :: [DatabaseEngine.Interface.SystemConfig.KafkaBroker.t()]
+  def get_all() do
+    all = SystemConfig.get(all_key()) || []
+    all |> Enum.map(fn x -> get(x) end)
+  end
+
+  @spec add_new(DatabaseEngine.Interface.SystemConfig.KafkaBroker.t()) ::
+          {:aborted, :already_exists | :invalid_model | any()}
+          | {:atomic, DatabaseEngine.Interface.SystemConfig.KafkaBroker.t()}
+  def add_new(model = %Model{}) do
+    SystemConfig.do_transactionally(fn ->
+      if is_valid_model(model) do
+        key_all = all_key()
+        key_model = single_key(model.host)
+
+        model_instance = SystemConfig.get_for_update(key_model)
+
+        if model_instance do
+          SystemConfig.abort_transaction(:already_exists)
+        else
+          all = SystemConfig.get_for_update(key_all) || []
+          all = [model.host | all]
+          SystemConfig.set(key_all, all)
+          SystemConfig.set(key_model, model)
+          model
+        end
+      else
+        SystemConfig.abort_transaction(:invalid_model)
+      end
+    end)
+  end
+
+  @spec edit(DatabaseEngine.Interface.SystemConfig.KafkaBroker.t()) ::
+          {:aborted, :not_exist | :conflict | :invalid_model | any()}
+          | {:atomic, DatabaseEngine.Interface.SystemConfig.KafkaBroker.t()}
+  def edit(model = %Model{}) do
+    SystemConfig.do_transactionally(fn ->
+      if is_valid_model(model) do
+        key = single_key(model.host)
+
+        model_instance =
+          SystemConfig.get_for_update(key) || SystemConfig.abort_transaction(:not_exist)
+
+        if model.version == model_instance.version do
+          model = %{model | version: model.version + 1}
+          SystemConfig.set(key, model)
+          model
+        else
+          SystemConfig.abort_transaction(:conflict)
+        end
+      else
+        SystemConfig.abort_transaction(:invalid_model)
+      end
+    end)
+  end
+
+  @spec del(binary()) ::
+          {:aborted, :not_exist | any()}
+          | {:atomic, DatabaseEngine.Interface.SystemConfig.KafkaBroker.t()}
+  def del(hostname) when is_binary(hostname) do
+    SystemConfig.do_transactionally(fn ->
+      key = single_key(hostname)
+      key_all = all_key()
+      n = SystemConfig.get(key)
+
+      if n == nil do
+        SystemConfig.abort_transaction(:not_exist)
+      else
+        SystemConfig.del(key)
+        all = SystemConfig.get_for_update(key_all) || []
+        all = all |> Enum.filter(fn x -> x != hostname end)
+        SystemConfig.set(key_all, all)
+        n
+      end
+    end)
+  end
+
+  @spec get(binary()) :: DatabaseEngine.Interface.SystemConfig.KafkaBroker.t()
+  def get(hostname) when is_binary(hostname) do
+    key = single_key(hostname)
+    SystemConfig.get(key)
+  end
+end
+
+defmodule DatabaseEngine.Interface.SystemConfig.KafkaQueueDispatcher do
+  defstruct consumer_name: "",
+            q_name: "",
+            dispatcher_node_name: "",
+            description: "",
+            version: 0,
+            additional_props: %{}
+end
+
+defmodule DatabaseEngine.Interface.SystemConfig.KafkaQueueDispatcher.Repo do
+  require DatabaseEngine.Interface.SystemConfig
+  alias DatabaseEngine.Interface.SystemConfig
+  require DatabaseEngine.Interface.SystemConfig.KafkaQueueDispatcher
+  alias DatabaseEngine.Interface.SystemConfig.KafkaQueueDispatcher, as: Model
+
+  @spec is_valid_model(DatabaseEngine.Interface.SystemConfig.KafkaQueueDispatcher.t()) ::
+          boolean()
+  def is_valid_model(model = %Model{}) do
+    r1 =
+      is_binary(model.consumer_name) and
+        is_binary(model.q_name) and is_binary(model.dispatcher_node_name) and
+        is_binary(model.description) and
+        is_number(model.version) and is_map(model.additional_props)
+
+    if r1 == true do
+      String.length(model.consumer_name) > 0
+    else
+      r1
+    end
+  end
+
+  defp all_key() do
+    "kafka_queue_dispatchers"
+  end
+
+  defp single_key(consumer_name) do
+    {"kafka_queue_dispatcher", consumer_name}
+  end
+
+  @spec get_all() :: [DatabaseEngine.Interface.SystemConfig.KafkaQueueDispatcher.t()]
+  def get_all() do
+    all = SystemConfig.get(all_key()) || []
+    all |> Enum.map(fn x -> get(x) end)
+  end
+
+  @spec add_new(DatabaseEngine.Interface.SystemConfig.KafkaQueueDispatcher.t()) ::
+          {:aborted, :already_exists | :invalid_model | any()}
+          | {:atomic, DatabaseEngine.Interface.SystemConfig.KafkaQueueDispatcher.t()}
+  def add_new(model = %Model{}) do
+    SystemConfig.do_transactionally(fn ->
+      if is_valid_model(model) do
+        key_all = all_key()
+        key_model = single_key(model.consumer_name)
+
+        model_instance = SystemConfig.get_for_update(key_model)
+
+        if model_instance do
+          SystemConfig.abort_transaction(:already_exists)
+        else
+          all = SystemConfig.get_for_update(key_all) || []
+          all = [model.consumer_name | all]
+          SystemConfig.set(key_all, all)
+          SystemConfig.set(key_model, model)
+          model
+        end
+      else
+        SystemConfig.abort_transaction(:invalid_model)
+      end
+    end)
+  end
+
+  @spec edit(DatabaseEngine.Interface.SystemConfig.KafkaQueueDispatcher.t()) ::
+          {:aborted, :not_exist | :conflict | :invalid_model | any()}
+          | {:atomic, DatabaseEngine.Interface.SystemConfig.KafkaQueueDispatcher.t()}
+  def edit(model = %Model{}) do
+    SystemConfig.do_transactionally(fn ->
+      if is_valid_model(model) do
+        key = single_key(model.consumer_name)
+
+        model_instance =
+          SystemConfig.get_for_update(key) || SystemConfig.abort_transaction(:not_exist)
+
+        if model.version == model_instance.version do
+          model = %{model | version: model.version + 1}
+          SystemConfig.set(key, model)
+          model
+        else
+          SystemConfig.abort_transaction(:conflict)
+        end
+      else
+        SystemConfig.abort_transaction(:invalid_model)
+      end
+    end)
+  end
+
+  @spec del(binary()) ::
+          {:aborted, :not_exist | any()}
+          | {:atomic, DatabaseEngine.Interface.SystemConfig.KafkaQueueDispatcher.t()}
+  def del(consumer_name) when is_binary(consumer_name) do
+    SystemConfig.do_transactionally(fn ->
+      key = single_key(consumer_name)
+      key_all = all_key()
+      n = SystemConfig.get(key)
+
+      if n == nil do
+        SystemConfig.abort_transaction(:not_exist)
+      else
+        SystemConfig.del(key)
+        all = SystemConfig.get_for_update(key_all) || []
+        all = all |> Enum.filter(fn x -> x != consumer_name end)
+        SystemConfig.set(key_all, all)
+        n
+      end
+    end)
+  end
+
+  @spec get(binary()) :: DatabaseEngine.Interface.SystemConfig.KafkaQueueDispatcher.t()
+  def get(consumer_name) when is_binary(consumer_name) do
+    key = single_key(consumer_name)
+    SystemConfig.get(key)
+  end
+end
+
 defmodule DatabaseEngine.Interface.SystemConfig.NodeModel do
   defstruct node_name: "node_name",
             cookie: :nocookie,

@@ -645,21 +645,48 @@ defmodule ApiserverWeb.Admin.Settings.Nodes.Controller do
 
   def get_all_nodes_config(conn, params) do
     st_time = Utilities.now()
-    Logging.debug("called. params:~p",[params])
-    {status, rtn}=
-    case Repo.list_all_nodes do
-      l when is_list(l) ->
-        {200, l|>Enum.map(fn x-> x|> Map.from_struct end )}
+    Logging.debug("called. params:~p", [params])
+
+    {status, rtn} =
+      case Repo.list_all_nodes() do
+        l when is_list(l) ->
+          {200, l |> Enum.map(fn x -> x |> Map.from_struct() end)}
+
         e ->
-          Logging.error("unhandled result:~p",[e])
+          Logging.error("unhandled result:~p", [e])
           {500, "unhandled result"}
-    end
+      end
+
     result = %{
       "_meta_" => %{
         @api_duration => Utilities.now() - st_time
       },
-      "result"=> rtn
+      "result" => rtn
     }
+
     conn |> send_response(status, result)
+  end
+
+  def brief_actives(conn, _params) do
+    st_time = Utilities.now
+
+    active_nodes = Utilities.all_active_nodes()
+
+    brief_data = active_nodes
+    |> Enum.map(fn x ->
+      case :rpc.block_call(x, NodeAdmin, :brief_node_info, [], 5_000) do
+        {:badrpc, _} -> nil
+        v -> v
+      end
+    end)
+
+    fin = Enum.zip(active_nodes, brief_data) |> Map.new
+    rtn = %{
+      "_meta_" => %{
+        "duration" => Utilities.now() - st_time
+      },
+      "result" => fin
+    }
+    conn|> send_response(200, rtn)
   end
 end
