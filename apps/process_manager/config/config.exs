@@ -31,9 +31,9 @@ use Mix.Config
 import_config("lua_module.exs")
 config(:process_manager, ProcessManager.UnitProcess,
   wait_to_new_message_timeout_to_hibernate:
-    System.get_env("UNIT_PROCESS_HIBERNATE_TIMEOUT") || 300_000,
+    System.get_env("UNIT_PROCESS_HIBERNATE_TIMEOUT") || 60_000,
   wait_to_new_message_timeout_to_terminate:
-    System.get_env("UNIT_PROCESS_TERMINATE_TIMEOUT") || 600_000,
+    System.get_env("UNIT_PROCESS_TERMINATE_TIMEOUT") || 900_000,
   success_Q: System.get_env("UNIT_PROCESS_SUCCESS_Q") || "unit_process_success_Q",
   fail_Q: System.get_env("USER_PROCESS_FAIL_Q") || "unit_process_fail_Q",
   cel_logging_Q: System.get_env("USER_PROCESS_CEL_LOGGING_Q") || "unit_process_logging_Q",

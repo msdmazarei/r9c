@@ -70,7 +70,7 @@ defmodule ApiserverWeb.Router do
     post "/brokers", Controller, :get_brokers
     post "/topics", Controller, :get_topics
     delete "/topics/:topic", Controller, :delete_topic
-    post "/topics/new" , Controller, :create_topic
+    post "/topics/new", Controller, :create_topic
   end
 
   scope "/api/admin/kafka/brokers", ApiserverWeb.Admin.Settings.Kafka.Broker do
@@ -92,5 +92,10 @@ defmodule ApiserverWeb.Router do
     put "/", Controller, :edit
     delete "/:key", Controller, :del
     get "/:key", Controller, :get
+    post "/start/:key", Controller, :start_consumer
+    post "/stop/:key", Controller, :stop_consumer
+    post "/runtime/running_consumers", Controller, :running_consumers
+    post "/runtime/stats", Controller, :consumer_stats
+
   end
 end

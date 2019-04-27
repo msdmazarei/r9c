@@ -35,7 +35,7 @@ defmodule ApiserverWeb.Admin.Settings.Kafka.Dispatcher.Controller do
     st_time = Utilities.now()
 
     Logging.debug("called. ")
-    all = Repo.get_all()|>Enum.map(fn x -> x|> Map.from_struct  end)
+    all = Repo.get_all() |> Enum.map(fn x -> x |> Map.from_struct() end)
 
     rtn = response_body(st_time, all)
 
@@ -177,5 +177,187 @@ defmodule ApiserverWeb.Admin.Settings.Kafka.Dispatcher.Controller do
     conn |> send_response(status, result)
   end
 
+  def is_dispatcher_running(dispatcher) do
+    # consumer_name: "",
+    #         q_name: "",
+    #         dispatcher_node_name: "",
+    #         description: "",
+    #         version: 0,
+    #         additional_props: %{}
+    Logging.debug("called. dispatcher:~p", [dispatcher])
 
+    node = dispatcher.dispatcher_node_name |> String.to_atom()
+    t = Utilities.remote_async_task(node, DatabaseEngine.DurableQueue, :get_running_consumers, [])
+    r = Utilities.await_remote_task(t, 5000, :no_response)
+
+    if is_map(r) do
+      {r |> Map.has_key?(dispatcher.consumer_name), r}
+    else
+      :no_response
+    end
+  end
+
+  def start_consumer(conn, params) do
+    Logging.debug("called. params:~p", [params])
+    st_time = Utilities.now()
+
+    key = params["key"]
+
+    {status, json_response} =
+      case Repo.get(key) do
+        nil ->
+          Logging.info("not found. broker:~p", [key])
+          {404, nil}
+
+        db_instance when is_map(db_instance) ->
+          dispatcher = db_instance |> Map.from_struct()
+
+          case is_dispatcher_running(dispatcher) do
+            :no_response ->
+              {500, "node not respond"}
+
+            {true, _} ->
+              {201, "already running"}
+
+            {false, _} ->
+              consumer_module = dispatcher.additional_props || %{}
+
+              consumer_module =
+                Map.get(consumer_module, "consumer_module") ||
+                  to_string(Dispatcher.Consumers.InQConsumer)
+
+              consumer_module = consumer_module |> String.to_atom()
+
+              t =
+                Utilities.remote_async_task(
+                  dispatcher.dispatcher_node_name |> String.to_atom(),
+                  DatabaseEngine.DurableQueue,
+                  :start_consumer_group,
+                  [dispatcher.q_name, dispatcher.consumer_name, consumer_module]
+                )
+
+              r = Utilities.await_remote_task(t, 5000, :no_response)
+
+              case r do
+                :no_response -> {500, "node not respond"}
+                {:ok, _} -> {200, "started"}
+                {:ok, _, _} -> {200, "started"}
+                {:error, e} -> {500, Utilities.to_string(e)}
+                :ignore -> {500, "ignore"}
+              end
+          end
+
+        e ->
+          Logging.error("unhandled response:~p", [e])
+          {500, %{"error" => "unhandled response"}}
+      end
+
+    conn |> send_response(status, response_body(st_time, json_response))
+  end
+
+  def stop_consumer(conn, params) do
+    Logging.debug("called. params:~p", [params])
+    st_time = Utilities.now()
+
+    key = params["key"]
+
+    {status, json_response} =
+      case Repo.get(key) do
+        nil ->
+          Logging.info("not found. broker:~p", [key])
+          {404, nil}
+
+        db_instance when is_map(db_instance) ->
+          dispatcher = db_instance |> Map.from_struct()
+
+          case is_dispatcher_running(dispatcher) do
+            :no_response ->
+              {500, "node not respond"}
+
+            {true, running_dispatchers} ->
+              first_workder_pid = running_dispatchers[key] |> hd() |> Map.get("pid")
+              Logging.debug("fisrt workder pid:~p", [first_workder_pid])
+              #
+              t =
+                Utilities.remote_async_task(
+                  dispatcher.dispatcher_node_name |> String.to_atom(),
+                  DatabaseEngine.DurableQueue,
+                  :stop_consumer_greoup_by_workder_pid,
+                  [first_workder_pid]
+                )
+
+              r = Utilities.await_remote_task(t, 5000, :no_response)
+              Logging.debug("remote task result:~p", [r])
+
+              case r do
+                :no_response ->
+                  {500, "node not respond"}
+
+                _ ->
+                  {200, "ok"}
+              end
+
+            {false, _} ->
+              {201, "already stopped"}
+          end
+
+        e ->
+          Logging.error("unhandled response:~p", [e])
+          {500, %{"error" => "unhandled response"}}
+      end
+
+    conn |> send_response(status, response_body(st_time, json_response))
+  end
+
+  def running_consumers(conn, params) do
+    Logging.debug("Called. params:~p", [params])
+    st_time = Utilities.now()
+    nodes = (params["nodes"] || [:erlang.node() |> to_string()]) |> Enum.map(&String.to_atom/1)
+
+    tasks =
+      nodes
+      |> Enum.map(fn x ->
+        Utilities.remote_async_task(x, DatabaseEngine.DurableQueue, :get_running_consumers, [])
+      end)
+
+    results = Utilities.await_multi_task(tasks, 5000, %{})
+
+    node_result =
+      Enum.zip(nodes, results)
+      |> Map.new()
+      |> Utilities.for_each_non_iterable_item(fn x ->
+        if is_pid(x) do
+          x |> :erlang.pid_to_list() |> to_string
+        else
+          x
+        end
+      end)
+
+    json_response = response_body(st_time, node_result)
+    conn |> send_response(200, json_response)
+  end
+
+  def consumer_stats(conn, params) do
+    Logging.debug("called. params:~p", [params])
+    st_time = Utilities.now()
+    nodes = params["nodes"] || Utilities.all_active_nodes() |> Enum.map(&to_string/1)
+    nodes = nodes |> Enum.map(&String.to_atom/1)
+
+    tasks =
+      nodes
+      |> Enum.map(fn x ->
+        Utilities.remote_async_task(
+          x,
+          DatabaseEngine.DurableQueue,
+          :get_running_consumer_stats,
+          []
+        )
+      end)
+
+    results = Utilities.await_multi_task(tasks, 5000, :no_response)
+    node_result = Enum.zip(nodes, results) |> Map.new()
+
+    rtn = response_body(st_time, node_result)
+    conn |> send_response(200, rtn)
+  end
 end

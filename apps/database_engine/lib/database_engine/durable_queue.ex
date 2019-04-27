@@ -284,12 +284,14 @@ defmodule DatabaseEngine.DurableQueue do
         consumer_group_name,
         consumer_module \\ DatabaseEngine.DurableQueue.Consumers.SimpleLogConsumer
       ) do
-    Logging.debug("""
-    Called With parameters:
-    topic_name: #{topic_name}
-    consumer_group_name: #{consumer_group_name}
-    consumer_module: #{consumer_module}
-    """)
+    Logging.debug(
+      "Called With parameters: topic_name: ~p consumer_group_name: ~p consumer_module: ~p",
+      [
+        topic_name,
+        consumer_group_name,
+        consumer_module
+      ]
+    )
 
     child_spec = %{
       :id => topic_name,
@@ -326,6 +328,15 @@ defmodule DatabaseEngine.DurableQueue do
     r
   end
 
+  def stop_consumer_greoup_by_workder_pid(pid) do
+    Logging.debug("Called. Pid:~p", [pid])
+    p_info = :erlang.process_info(pid)
+    pid_sup_consumer_group = p_info[:dictionary][:"$ancestors"] |> Enum.at(1)
+    Logging.debug("pid_sup_consumer_group:~p", [pid_sup_consumer_group])
+    stop_consumer_group(pid_sup_consumer_group)
+  end
+
+  @spec stop_consumer_group(pid()) :: :ok | {:error, :not_found}
   def stop_consumer_group(pid) do
     DynamicSupervisor.terminate_child(
       DatabaseEngine.DurableQueue.ConsumerGroupWorkers.Supervisor,
@@ -335,6 +346,82 @@ defmodule DatabaseEngine.DurableQueue do
 
   def stop_consumer_group() do
     DynamicSupervisor.stop(DatabaseEngine.DurableQueue.ConsumerGroupWorkers.Supervisor)
+  end
+
+  def get_running_consumers() do
+    list_of_sups =
+      DynamicSupervisor.which_children(
+        DatabaseEngine.DurableQueue.ConsumerGroupWorkers.Supervisor
+      )
+      |> Enum.map(fn {_, x, _, _} -> x end)
+
+    sup_states = list_of_sups |> Enum.map(&:sys.get_state/1)
+
+    consumer_sup_pids =
+      sup_states
+      |> Enum.map(fn x ->
+        {_, _, _, {_, %{:consumer => cons}}, _, _, _, _, _, _, _} = x
+        cons |> elem(1)
+      end)
+
+    consumer_sup_pids
+    |> Enum.map(fn x ->
+      {_, _, _, _, {_, cosumers_pid_map}, _, _, _, _, _, _} = :sys.get_state(x)
+
+      cosumers_pid_map
+      |> Map.to_list()
+      |> Enum.map(fn {consumer_pid,
+                      [consumer_module, consumer_group, q_name, partition_no, consumer_config]} ->
+        consumer_config =
+          if consumer_config[:fetch_options] do
+            d = consumer_config |> Map.new()
+            d |> Map.put(:fetch_options, d[:fetch_options] |> Map.new())
+          else
+            consumer_config |> Map.new()
+          end
+
+        {consumer_group,
+         %{
+           "pid" => consumer_pid,
+           "q_name" => q_name,
+           "partition_no" => partition_no,
+           "config" => consumer_config,
+           "consumer_module" => consumer_module
+         }}
+      end)
+      |> Enum.group_by(fn {i, _} -> i end, fn {_, v} -> v end)
+    end)
+    |> Enum.reduce(%{}, fn i, acc ->
+      acc |> Map.merge(i)
+    end)
+  end
+
+  def get_running_consumer_stats() do
+    r = get_running_consumers()
+
+    r
+    |> Map.to_list()
+    |> Enum.map(fn {cn, pl} ->
+      {cn,
+       pl
+       |> Enum.map(fn x ->
+         worker_pid = x |> Map.get("pid")
+         partiotion_no = x |> Map.get("partition_no")
+
+         if worker_pid do
+           %{
+             partiotion_no =>
+               DatabaseEngine.Interface.LProcessData.get({"consumer", worker_pid}) || %{}
+           }
+         else
+           %{partiotion_no => %{}}
+         end
+       end)
+       |> Enum.reduce(%{}, fn x, acc ->
+         Map.merge(x, acc)
+       end)}
+    end)
+    |> Map.new()
   end
 
   def get_consumers_pid() do
