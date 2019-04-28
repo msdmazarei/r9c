@@ -96,6 +96,13 @@ defmodule ApiserverWeb.Router do
     post "/stop/:key", Controller, :stop_consumer
     post "/runtime/running_consumers", Controller, :running_consumers
     post "/runtime/stats", Controller, :consumer_stats
+  end
 
+  scope "/api/admin/code", ApiserverWeb.Admin.Settings.Code.LUA do
+    post "/runtime/lua/eval", Controller, :execute_lua
+    get "/lua/modules", Controller, :list_all_modules
+    get "/lua/modules/read", Controller, :get_module
+    post "/lua/modules", Controller, :create_module
+    delete "/lua/modules", Controller, :del_module
   end
 end

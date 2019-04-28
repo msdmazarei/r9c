@@ -241,7 +241,7 @@ defmodule Utilities.Admin.Node do
         Logging.debug("message arrived processs it")
         :erl_tar.extract({:binary, lua_tar})
         # set lua load path
-        System.put_env("LUA_LOAD_PATH", File.cwd()|>elem(1))
+        System.put_env("LUA_LOAD_PATH", File.cwd() |> elem(1))
     after
       120_000 ->
         Logging.debug("nothing arrived let exit")
@@ -308,7 +308,7 @@ defmodule Utilities.Admin.Mnesia do
     case :rpc.block_call(node, :mnesia, :start, [], 5000) do
       {:badrpc, reason} ->
         Logging.error("error:~p", [reason])
-        {:aborted, reason}
+        {:aborted, :io_lib.format("~p", [reason])}
 
       :ok ->
         Logging.debug("adding extra node:~p", [node])
