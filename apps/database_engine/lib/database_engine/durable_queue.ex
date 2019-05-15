@@ -59,6 +59,24 @@ defmodule DatabaseEngine.DurableQueue do
     # end
   end
 
+  @spec enqueue_string(binary(), integer(), binary()) ::
+          :leader_not_available
+          | nil
+          | :ok
+          | binary()
+          | maybe_improper_list(
+              binary() | maybe_improper_list(any(), binary() | []) | byte(),
+              binary() | []
+            )
+          | {:error, any()}
+          | {:ok, integer()}
+  def enqueue_string(topic_name, partition_number, str) do
+    Logging.debug("called. topicname:~p pn:~p str:~p", [topic_name, partition_number, str])
+    rtn = KafkaEx.produce(topic_name, partition_number, str)
+    Logging.debug("Return Value: #{rtn}")
+    rtn
+  end
+
   @spec enqueue(String.t(), integer(), any) :: :nok | :ok
   def enqueue(topic_name, partition_number, object) do
     Logging.debug(
@@ -125,6 +143,42 @@ defmodule DatabaseEngine.DurableQueue do
       end
   end
 
+  @spec enqueue_string(String.t(), String.t()) :: :nok | :ok
+  def enqueue_string(topic_name, str) do
+    Logging.debug("Called with parameters: topic_name:~p string: ~p", [topic_name, str])
+    Logging.debug("calculating kafka topic partitions ...")
+
+    partitions =
+      get_partitions_of_topic(topic_name)
+      |> Enum.map(fn x -> x.partition_id end)
+      |> Enum.shuffle()
+
+    case partitions do
+      l when is_list(l) and length(l) > 0 ->
+        Logging.debug("calulated partitions for topic: ~p are: ~p", [topic_name, l])
+
+        case enqueue_string(topic_name, hd(l), str) do
+          :ok ->
+            :ok
+
+          {:ok, _} ->
+            :ok
+
+          e ->
+            Logging.warn("not proper result from kafkaex. result is:~p", [e])
+            :nok
+        end
+
+      [] ->
+        Logging.warn(
+          "no partition found for topic: ~p, may be there is no topic. data to enqueue: ~p",
+          [topic_name, str]
+        )
+
+        :nok
+    end
+  end
+
   @spec enqueue(String.t(), any) :: :ok | :nok
   def enqueue(topic_name, object) do
     Logging.debug("Called with parameters: topic_name:~p object: ~p", [topic_name, object])
@@ -149,6 +203,143 @@ defmodule DatabaseEngine.DurableQueue do
         )
 
         :ok
+    end
+  end
+
+  @spec enqueue_string_list(String.t(), [String.t()]) ::
+          {[{integer(), :ok | :nok}], %{optional(<<_::40, _::_*24>>) => any()}}
+  def enqueue_string_list(topic_name, list_of_strings) do
+    #sample return value
+    #     {[{0, :ok}, {1, :ok}, {2, :ok}, {3, :ok}],
+    #  %{
+    #    "grouping" => 0,
+    #    "partitions_durations" => [
+    #      {0, %{"agg_binaries" => 0, "kafka_push" => 6, "serialization" => 0}},
+    #      {1, %{"agg_binaries" => 0, "kafka_push" => 8, "serialization" => 0}},
+    #      {2, %{"agg_binaries" => 0, "kafka_push" => 15, "serialization" => 0}},
+    #      {3, %{"agg_binaries" => 0, "kafka_push" => 18, "serialization" => 0}}
+    #    ],
+    #    "total" => %{
+    #      "agg_binaries" => 0,
+    #      "kafka_push" => 18,
+    #      "serialization" => 0,
+    #      "total" => 18
+    #    }
+    #  }}
+
+    partitions =
+      get_partitions_of_topic(topic_name)
+      |> Enum.map(fn x -> x.partition_id end)
+      |> Enum.shuffle()
+
+    durations = %{}
+
+    case partitions do
+      l when is_list(l) and length(l) > 0 ->
+        len_parts = length(l)
+
+        st_time = Utilities.now()
+
+        partition_for_items =
+          list_of_strings
+          |> Enum.with_index()
+          |> Enum.map(fn {_, i} ->
+            rem(i, len_parts)
+          end)
+
+        list_of_strings_with_index = list_of_strings |> Enum.with_index()
+
+        part_obj = Enum.zip(partition_for_items, list_of_strings_with_index)
+        map_part_obj = part_obj |> Enum.group_by(fn {p, _} -> p end, fn {_, o} -> o end)
+
+        du_time = Utilities.now() - st_time
+
+        durations = durations |> Map.put("grouping", du_time)
+
+        tasks =
+          map_part_obj
+          |> Map.to_list()
+          |> Enum.map(fn {p, objs_list_with_index} ->
+            Task.async(fn ->
+              sub_duration = %{}
+
+              st_time = Utilities.now()
+
+              serialized_obj_list_with_index = objs_list_with_index
+              du_time = Utilities.now() - st_time
+              sub_duration = sub_duration |> Map.put("serialization", du_time)
+
+              st_time = Utilities.now()
+
+              list_of_list_of_bins_with_index =
+                Utilities.agg_binaries_till_reach_to_size(
+                  serialized_obj_list_with_index,
+                  fn {b, _} -> byte_size(b) end,
+                  @kafka_max_message_size_to_produce
+                )
+
+              du_time = Utilities.now() - st_time
+              sub_duration = sub_duration |> Map.put("agg_binaries", du_time)
+
+              result_of_sending_msg =
+                list_of_list_of_bins_with_index
+                |> Enum.map(fn list_of_bin_with_index ->
+                  list_of_kafka_msgs =
+                    list_of_bin_with_index
+                    |> Enum.map(fn {x_bin, _} ->
+                      %KafkaEx.Protocol.Produce.Message{value: x_bin}
+                    end)
+
+                  r =
+                    KafkaEx.produce(%KafkaEx.Protocol.Produce.Request{
+                      topic: topic_name,
+                      partition: p,
+                      required_acks: 1,
+                      messages: list_of_kafka_msgs
+                    })
+
+                  case r do
+                    :ok ->
+                      list_of_bin_with_index |> Enum.map(fn {_, i} -> {i, :ok} end)
+
+                    {:ok, _} ->
+                      list_of_bin_with_index |> Enum.map(fn {_, i} -> {i, :ok} end)
+
+                    other ->
+                      Logging.error("unexpected result for enqueue:~p", [other])
+                      list_of_bin_with_index |> Enum.map(fn {_, i} -> {i, :nok} end)
+                  end
+                end)
+
+              du_time = Utilities.now() - st_time
+              sub_duration = sub_duration |> Map.put("kafka_push", du_time)
+              rtn_list = result_of_sending_msg |> List.flatten()
+              {rtn_list, {p, sub_duration}}
+            end)
+          end)
+
+        results = tasks |> Enum.map(fn t -> Task.await(t) end)
+        result_lists = results |> Enum.map(fn {l, _} -> l end)
+        result_part_durations = results |> Enum.map(fn {_, d} -> d end)
+
+        durations = durations |> Map.put("partitions_durations", result_part_durations)
+
+        max_sub_duration =
+          result_part_durations
+          |> Enum.map(fn {_, du} ->
+            sum_all_values = du |> Map.to_list() |> Enum.map(fn {_, v} -> v end) |> Enum.sum()
+            du |> Map.put("total", sum_all_values)
+          end)
+          |> Enum.max_by(fn x -> x["total"] end)
+
+        durations = durations |> Map.put("total", max_sub_duration)
+
+        rtn = result_lists |> List.flatten()
+        {rtn, durations}
+
+      _ ->
+        rtn = list_of_strings |> Enum.with_index() |> Enum.map(fn _, i -> {i, :nok} end)
+        {rtn, durations}
     end
   end
 

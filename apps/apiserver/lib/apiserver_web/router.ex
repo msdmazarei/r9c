@@ -105,4 +105,8 @@ defmodule ApiserverWeb.Router do
     post "/lua/modules", Controller, :create_module
     delete "/lua/modules", Controller, :del_module
   end
+
+  scope "/api/admin/event_log", ApiserverWeb.Admin.Settings.EventLogger do
+    post "/" , Controller, :new_log_event
+  end
 end

@@ -10,6 +10,9 @@ defmodule Dispatcher.Consumers.InQConsumer do
   require Utilities.Logging
   alias Utilities.Logging
 
+  require DatabaseEngine.Utils.EventLogger
+  alias DatabaseEngine.Utils.EventLogger
+
   @arrived_messages "arrived_messages"
   @processed_messages "processed_messages"
   @process_duration "process_duration"
@@ -32,14 +35,26 @@ defmodule Dispatcher.Consumers.InQConsumer do
   def init(topic, partition) do
     Logging.debug("Called. topic:~p partition:~p", [topic, partition])
 
-    {:ok,
-     %{
-       "topic" => topic,
-       "partition" => partition,
-       @arrived_messages => 0,
-       @processed_messages => 0,
-       @last_arrived_message_batch_size => []
-     }}
+    rtn =
+      {:ok,
+       %{
+         "topic" => topic,
+         "partition" => partition,
+         @arrived_messages => 0,
+         @processed_messages => 0,
+         @last_arrived_message_batch_size => []
+       }}
+
+    EventLogger.log_event("", "", "start", %{
+      "topic" => topic,
+      "partition" => partition,
+      "__index" => %{
+        "s1" => topic,
+        "s2" => Utilities.to_string(partition)
+      }
+    })
+
+    rtn
   end
 
   # note - messages are delivered in batches
@@ -102,11 +117,137 @@ defmodule Dispatcher.Consumers.InQConsumer do
     speed_meter(message_set, state)
   end
 
+  def log_event_entity(main_state, entity_name, entity_id, state, data) do
+    index_map = data["__index"] || %{}
+
+    index_map =
+      index_map
+      |> Map.put("s1", main_state["topic"])
+      |> Map.put("s2", Utilities.to_string(main_state["partition"]))
+
+    data = data |> Map.put("__index", index_map)
+
+    %{
+      "time" => Utilities.now(),
+      "entity_name" => entity_name,
+      "entity_id" => entity_id,
+      "state" => state,
+      "additional_data" => data
+    }
+  end
+
+  def filter_by_type(list, type) do
+    list
+    |> Enum.filter(fn x ->
+      x.__struct__ == type
+    end)
+  end
+
+  def count_entity_log(main_state, entity, count, state) do
+    if count > 0 do
+      log_event_entity(main_state, entity |> Utilities.to_string(), "", state, %{
+        "__index" => %{"i0" => count}
+      })
+    else
+      nil
+    end
+  end
+
+  def update_events(event_logs, state, list_of_msgs, type) do
+    smses = list_of_msgs |> filter_by_type(DatabaseEngine.Models.SMS)
+    sms_count = smses |> length
+
+    event_logs = [
+      count_entity_log(state, DatabaseEngine.Models.SMS, sms_count, "#{type}_count") | event_logs
+    ]
+
+    event_logs =
+      if(sms_count > 0) do
+        arrive_sms_ids =
+          smses
+          |> Enum.map(fn x ->
+            log_event_entity(
+              state,
+              DatabaseEngine.Models.SMS |> Utilities.to_string(),
+              x.id,
+              type,
+              %{}
+            )
+          end)
+
+        event_logs ++ arrive_sms_ids
+      else
+        event_logs
+      end
+
+    radiuses = list_of_msgs |> filter_by_type(DatabaseEngine.Models.RadiusPacket)
+    radius_count = radiuses |> length
+
+    event_logs = [
+      count_entity_log(state, DatabaseEngine.Models.RadiusPacket, radius_count, type)
+      | event_logs
+    ]
+
+    event_logs =
+      if(radius_count > 0) do
+        arrive_radius_ids =
+          radiuses
+          |> Enum.map(fn x ->
+            log_event_entity(
+              state,
+              DatabaseEngine.Models.RadiusPacket |> Utilities.to_string(),
+              x.id,
+              type,
+              %{}
+            )
+          end)
+
+        event_logs ++ arrive_radius_ids
+      else
+        event_logs
+      end
+
+    diameters = list_of_msgs |> filter_by_type(DatabaseEngine.Models.DiameterPacket)
+    diameter_count = diameters |> length
+
+    event_logs = [
+      count_entity_log(
+        state,
+        DatabaseEngine.Models.DiameterPacket,
+        diameter_count,
+        type
+      )
+      | event_logs
+    ]
+
+    event_logs =
+      if(diameter_count > 0) do
+        arrive_diameter_ids =
+          diameters
+          |> Enum.map(fn x ->
+            log_event_entity(
+              state,
+              DatabaseEngine.Models.DiameterPacket |> Utilities.to_string(),
+              x.id,
+              type,
+              %{}
+            )
+          end)
+
+        event_logs ++ arrive_diameter_ids
+      else
+        event_logs
+      end
+
+    event_logs
+  end
+
   def handle_message_set(
         message_set,
         state = %{"last_arrived_message_batch_size" => last_arrived_message_batch_size}
       ) do
     st = Utilities.now()
+    event_logs = []
 
     Logging.debug("Called. message_set legth:~p", [message_set |> length])
 
@@ -124,6 +265,8 @@ defmodule Dispatcher.Consumers.InQConsumer do
           _ -> false
         end
       end)
+
+    event_logs = update_events(event_logs, state, to_send_message, "arrive")
 
     Logging.debug("call send messages by messages len:~p", [to_send_message |> length])
 
@@ -144,11 +287,16 @@ defmodule Dispatcher.Consumers.InQConsumer do
 
     need_to_requeue_count = (state[@need_to_requeue_count] || 0) + length(need_to_requeue || [])
 
-    dropped_messages_cause_of_retry =
+    dropable_messages =
       need_to_requeue
       |> Enum.filter(fn msg ->
         (msg.options["__requeue_retry__"] || 0) >= @requeue_retry_count - 1
       end)
+
+    event_logs = update_events(event_logs, state, dropable_messages, "drop")
+
+    dropped_messages_cause_of_retry =
+      dropable_messages
       |> length
 
     need_to_requeue =
@@ -170,6 +318,8 @@ defmodule Dispatcher.Consumers.InQConsumer do
         x.options["__requeue_retry__"] < @requeue_retry_count
       end)
 
+    event_logs = update_events(event_logs, state, need_to_requeue, "requeue")
+
     need_to_requeue
     |> Enum.map(fn msg ->
       :ok = DatabaseEngine.DurableQueue.enqueue(state["topic"], state["partition"], msg)
@@ -185,6 +335,9 @@ defmodule Dispatcher.Consumers.InQConsumer do
         l ->
           [length(message_set) | l]
       end
+
+    event_logs = event_logs |> Enum.filter(fn x -> x != nil end)
+    EventLogger.log_events(event_logs)
 
     new_state =
       state
@@ -206,6 +359,7 @@ defmodule Dispatcher.Consumers.InQConsumer do
       |> Map.put(@last_arrived_message_batch_size, last_arrived_message_batch_size)
 
     update_stats(new_state)
+
     {:async_commit, new_state}
   end
 end

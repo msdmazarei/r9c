@@ -109,7 +109,13 @@ defmodule ProcessManager.UnitProcess.GeneralUnitProcess do
           end)
 
         Logging.debug("initialize state: ~p", [state])
-        EventLogger.log_event(nil, nil, "init", state)
+
+        EventLogger.log_event(nil, nil, "init", %{
+          "__index" => %{
+            "s0" => process_name
+          }
+        })
+
         {:ok, state}
       end
 
@@ -203,11 +209,37 @@ defmodule ProcessManager.UnitProcess.GeneralUnitProcess do
       def handle_call(
             {:echo, msg},
             _,
-            state
+            state = %State{
+              process_name: process_name
+            }
           ) do
         Logging.debug("~p Called, Echo Message:~p", [state, msg])
+
+        EventLogger.log_event(nil, nil, "echo", %{
+          "__index" => %{
+            "s0" => Utilities.to_string(process_name),
+            "s1" => Utilities.to_string(msg)
+          }
+        })
+
         state = %State{state | last_arrived_message_time: Utilities.now()}
         {:reply, msg, state}
+      end
+
+      def event_log(ename, eid, str_state, s0 \\ "", s1 \\ "", i0 \\ -1, i1 \\ -1) do
+        %{
+          "entity_name" => ename,
+          "entity_id" => eid,
+          "state" => str_state,
+          "additional_data" => %{
+            "__index" => %{
+              "s0" => s0,
+              "s1" => s1,
+              "i0" => i0,
+              "i1" => i1
+            }
+          }
+        }
       end
 
       def handle_call(
@@ -221,10 +253,26 @@ defmodule ProcessManager.UnitProcess.GeneralUnitProcess do
         identifier = ProcessManager.UnitProcess.Identifier.get_identifier(msg)
         # Logging.debug("pname: ~p -> ingress msg :~p arrived", [process_name, msg])
         Logging.debug("pname: ~p -> id:~p ", [process_name, identifier])
+        events = []
+        str_e_type = Utilities.to_string(Utilities.get_struct_type(msg))
+        str_identifier = Utilities.to_string(identifier)
+
+        ev =
+          event_log(
+            str_e_type,
+            str_identifier,
+            "ingress",
+            process_name
+          )
+
+        events = [ev | events]
 
         rtn =
           if state.last_10_processed_messages |> Enum.member?(msg.id) do
             Logging.debug("pname: ~p -> message: ~p already processed.", [process_name, msg.id])
+            ev = event_log(str_e_type, str_identifier, "already_processed", process_name)
+            events = [ev | events]
+            EventLogger.log_events(events)
             {:reply, true, state}
           else
             script = ProcessManager.UnitProcess.Identifier.get_script(msg, state)
@@ -246,6 +294,8 @@ defmodule ProcessManager.UnitProcess.GeneralUnitProcess do
                 %{}
               end
 
+            st_time = Utilities.now()
+
             script_result =
               ProcessManager.Script.run_script(
                 script,
@@ -254,6 +304,23 @@ defmodule ProcessManager.UnitProcess.GeneralUnitProcess do
                 additional_functions,
                 state.cel_script_limits.run_timeout || 5000
               )
+
+            du = Utilities.now() - st_time
+            script_status_result = script_result |> Utilities.to_string()
+            Logging.debug("script_status_result:~p", [script_status_result])
+
+            ev =
+              event_log(
+                str_e_type,
+                str_identifier,
+                "script_executed",
+                process_name,
+                script_status_result,
+                du
+              )
+
+            events = [ev | events]
+            EventLogger.log_events(events)
 
             Logging.debug("pname: ~p -> script result: ~p", [process_name, script_result])
 
@@ -282,14 +349,6 @@ defmodule ProcessManager.UnitProcess.GeneralUnitProcess do
           end
 
         Logging.debug("pname :~p log_event called", [process_name])
-
-        EventLogger.log_event(
-          ModelUtils.get_entity_type(msg),
-          ModelUtils.get_entity_id(msg),
-          "process",
-          %{}
-        )
-
         rtn
       end
 
@@ -301,6 +360,12 @@ defmodule ProcessManager.UnitProcess.GeneralUnitProcess do
             }
           ) do
         identifier = ProcessManager.UnitProcess.Identifier.get_identifier(msg)
+        str_identifier = identifier |> Utilities.to_string()
+        str_e_type = Utilities.get_struct_type(msg) |> Utilities.to_string()
+        events = []
+        ev = event_log(str_e_type, identifier, "process_message", process_name)
+        events = [ev | events]
+
         # Logging.debug("pname: ~p -> ingress msg :~p arrived", [process_name, msg])
         Logging.debug("pname: ~p -> id:~p ", [process_name, identifier])
 
@@ -316,7 +381,10 @@ defmodule ProcessManager.UnitProcess.GeneralUnitProcess do
             }
 
             update_process_stat_data(state)
-            {:noreply,  state}
+            ev = event_log(str_e_type, str_identifier, "already_processed", process_name)
+            events = [ev | events]
+            EventLogger.log_events(events)
+            {:noreply, state}
           else
             script = ProcessManager.UnitProcess.Identifier.get_script(msg, state)
 
@@ -337,6 +405,8 @@ defmodule ProcessManager.UnitProcess.GeneralUnitProcess do
                 %{}
               end
 
+            st_time = Utilities.now()
+
             script_result =
               ProcessManager.Script.run_script(
                 script,
@@ -345,6 +415,22 @@ defmodule ProcessManager.UnitProcess.GeneralUnitProcess do
                 additional_functions,
                 state.cel_script_limits.run_timeout || 5000
               )
+
+            du_time = Utilities.now() - st_time
+            script_status_result = script_result |> Utilities.to_string()
+            Logging.debug("script_status_result:~p", [script_status_result])
+
+            ev =
+              event_log(
+                str_e_type,
+                str_identifier,
+                "script_executed",
+                process_name,
+                script_status_result,
+                du_time
+              )
+
+            events = [ev | events]
 
             Logging.debug("pname: ~p -> script result: ~p", [process_name, script_result])
 
@@ -363,7 +449,8 @@ defmodule ProcessManager.UnitProcess.GeneralUnitProcess do
 
             state = update_last_10_processed_messages(state, msg)
 
-            # Logging.debug("checking for inernal_callback ->~p", [msg.internal_callback])
+            Logging.debug("events:~p", [events])
+            EventLogger.log_events(events)
 
             if msg.internal_callback != nil do
               callback(state, msg.internal_callback)
@@ -375,14 +462,7 @@ defmodule ProcessManager.UnitProcess.GeneralUnitProcess do
 
         Logging.debug("pname :~p log_event called", [process_name])
 
-        EventLogger.log_event(
-          ModelUtils.get_entity_type(msg),
-          ModelUtils.get_entity_id(msg),
-          "process",
-          %{}
-        )
-
-        Logging.debug("returns:~p",[rtn])
+        Logging.debug("returns:~p", [rtn])
         rtn
       end
 
@@ -407,6 +487,12 @@ defmodule ProcessManager.UnitProcess.GeneralUnitProcess do
             process_name,
             state
           ])
+
+          EventLogger.log_event("", "", "hibernate", %{
+            "__index" => %{
+              "s0" => process_name
+            }
+          })
 
           :proc_lib.hibernate(:gen_server, :enter_loop, [__MODULE__, [], state])
         end
@@ -444,6 +530,12 @@ defmodule ProcessManager.UnitProcess.GeneralUnitProcess do
               ]
             )
 
+            EventLogger.log_event("", "", "stop", %{
+              "__index" => %{
+                "s0" => process_name
+              }
+            })
+
             {:stop, "no message for long time", state}
           else
             {:noreply, state}
@@ -460,7 +552,12 @@ defmodule ProcessManager.UnitProcess.GeneralUnitProcess do
         res
       end
 
-      def handle_info({:ingress, msg, from, ref}, state) do
+      def handle_info(
+            {:ingress, msg, from, ref},
+            state = %State{
+              process_name: process_name
+            }
+          ) do
         Logging.debug("info ingress - msg:~p from:~p ref:~p", [
           msg,
           from,
@@ -469,10 +566,21 @@ defmodule ProcessManager.UnitProcess.GeneralUnitProcess do
 
         # send arrived message as new message to postpone processing
         GenServer.cast(self(), {:process_message, msg})
+        str_e_type = msg |> Utilities.get_struct_type() |> Utilities.to_string()
+
+        str_identifier =
+          ProcessManager.UnitProcess.Identifier.get_identifier(msg) |> Utilities.to_string()
 
         send(from, ref)
         new_state = %State{state | arrived_messages: state.arrived_messages + 1}
         update_process_stat_data(new_state)
+
+        EventLogger.log_event(str_e_type, str_identifier, "ingress", %{
+          "__index" => %{
+            "s0" => process_name
+          }
+        })
+
         {:noreply, new_state}
       end
 
@@ -500,7 +608,9 @@ defmodule ProcessManager.UnitProcess.GeneralUnitProcess do
 
       def terminate(
             reason,
-            state
+            state = %State{
+              process_name: process_name
+            }
           ) do
         Logging.debug("Called. reason:~p, proccess name:~p", [reason, state.process_name])
         pmodel = DatabaseEngine.Interface.Process.get(state.process_name)
@@ -511,6 +621,12 @@ defmodule ProcessManager.UnitProcess.GeneralUnitProcess do
           DatabaseEngine.Interface.LProcess.del(state.process_name)
           delete_process_stat_data(state)
         end
+
+        EventLogger.log_event("", "", "terminate", %{
+          "__index" => %{
+            "s0" => process_name
+          }
+        })
 
         state
       end

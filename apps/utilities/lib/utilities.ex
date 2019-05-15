@@ -58,6 +58,13 @@ defmodule Utilities do
     Node.list() ++ [node()]
   end
 
+  def get_struct_type(obj) do
+    if is_map(obj) do
+      Map.get(obj,:__struct__,"UNKNOWN")
+    else
+      "UNKNOWN"
+    end
+  end
   @doc """
   gets unixtime
   """
