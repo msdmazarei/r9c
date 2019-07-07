@@ -459,3 +459,140 @@ defmodule DatabaseEngine.Interface.SystemConfig.Node.Repo do
     SystemConfig.get(key)
   end
 end
+
+defmodule DatabaseEngine.Interface.SystemConfig.Druid.IngestionURLModel do
+  defstruct host: "",
+            port: 8200,
+            url: "/v2/",
+            https: false,
+            username: "",
+            password: "",
+            version: 0,
+            description: "",
+            additional_props: %{},
+            pk: ""
+end
+
+defmodule DatabaseEngine.Interface.SystemConfig.Druid.IngestionURL.Repo do
+  require DatabaseEngine.Interface.SystemConfig
+  alias DatabaseEngine.Interface.SystemConfig
+  require DatabaseEngine.Interface.SystemConfig.Druid.IngestionURLModel
+  alias DatabaseEngine.Interface.SystemConfig.Druid.IngestionURLModel, as: Model
+
+  @spec is_valid_model(DatabaseEngine.Interface.SystemConfig.Druid.IngestionURLModel.t()) ::
+          boolean()
+  def is_valid_model(model = %Model{}) do
+    r1 =
+      is_binary(model.host) and
+        is_binary(model.url) and
+        is_boolean(model.https) and
+        is_number(model.port) and
+        is_map(model.additional_props) and
+        is_number(model.version) and
+        is_binary(model.description)
+
+    r1 =
+      if r1 do
+        r1 and String.length(model.host) > 0 and String.length(model.url) > 0 and
+          (model.port > 0 and model.port < 65535)
+      end
+
+    r1
+  end
+
+  defp all_key() do
+    "druid_ingestion_urls"
+  end
+
+  defp single_key(key) do
+    {"druid_ingestion_url", key}
+  end
+
+  defp get_model_key(model) do
+    "#{model.host}#{model.port}#{model.url}"
+  end
+
+  @spec get_all() :: [DatabaseEngine.Interface.SystemConfig.Druid.IngestionURLModel.t()]
+  def get_all() do
+    all = SystemConfig.get(all_key()) || []
+    all |> Enum.map(fn x -> get(x) end)
+  end
+
+  @spec add_new(DatabaseEngine.Interface.SystemConfig.Druid.IngestionURLModel.t()) ::
+          {:aborted, :already_exists | :invalid_model | any()}
+          | {:atomic, DatabaseEngine.Interface.SystemConfig.Druid.IngestionURLModel.t()}
+  def add_new(model = %Model{}) do
+    SystemConfig.do_transactionally(fn ->
+      if is_valid_model(model) do
+        key_all = all_key()
+        key_model = single_key(get_model_key(model))
+
+        model_instance = SystemConfig.get_for_update(key_model)
+
+        if model_instance do
+          SystemConfig.abort_transaction(:already_exists)
+        else
+          all = SystemConfig.get_for_update(key_all) || []
+          all = [get_model_key(model) | all]
+          SystemConfig.set(key_all, all)
+          SystemConfig.set(key_model, model)
+          model = %{model | pk: get_model_key(model)}
+          model
+        end
+      else
+        SystemConfig.abort_transaction(:invalid_model)
+      end
+    end)
+  end
+
+  @spec edit(DatabaseEngine.Interface.SystemConfig.KafkaQueueDispatcher.t()) ::
+          {:aborted, :not_exist | :conflict | :invalid_model | any()}
+          | {:atomic, DatabaseEngine.Interface.SystemConfig.KafkaQueueDispatcher.t()}
+  def edit(model = %Model{}) do
+    SystemConfig.do_transactionally(fn ->
+      if is_valid_model(model) do
+        key = single_key(get_model_key(model))
+
+        model_instance =
+          SystemConfig.get_for_update(key) || SystemConfig.abort_transaction(:not_exist)
+
+        if model.version == model_instance.version do
+          model = %{model | version: model.version + 1}
+          SystemConfig.set(key, model)
+          model
+        else
+          SystemConfig.abort_transaction(:conflict)
+        end
+      else
+        SystemConfig.abort_transaction(:invalid_model)
+      end
+    end)
+  end
+
+  @spec del(binary()) ::
+          {:aborted, :not_exist | any()}
+          | {:atomic, DatabaseEngine.Interface.SystemConfig.KafkaQueueDispatcher.t()}
+  def del(key) when is_binary(key) do
+    SystemConfig.do_transactionally(fn ->
+      key = single_key(key)
+      key_all = all_key()
+      n = SystemConfig.get(key)
+
+      if n == nil do
+        SystemConfig.abort_transaction(:not_exist)
+      else
+        SystemConfig.del(key)
+        all = SystemConfig.get_for_update(key_all) || []
+        all = all |> Enum.filter(fn x -> x != key end)
+        SystemConfig.set(key_all, all)
+        n
+      end
+    end)
+  end
+
+  @spec get(binary()) :: DatabaseEngine.Interface.SystemConfig.KafkaQueueDispatcher.t()
+  def get(key) when is_binary(key) do
+    key = single_key(key)
+    SystemConfig.get(key)
+  end
+end
